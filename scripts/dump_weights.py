@@ -22,8 +22,7 @@ def make_safe_name(name):
 #iterate over the tensors in the model and save them to a file.
 for tensor_name in model:
     tensor = model[tensor_name]
-    numpy_array = tensor.cpu().numpy()
-    bytes = numpy_array.tobytes()
+    bytes = tensor.cpu().contiguous().view(torch.uint8).numpy().tobytes()
     # remove invalid characters from the tensor name
     make_safe_name(tensor_name)
     #save the contents of the tensor to a file
