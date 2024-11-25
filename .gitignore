@@ -35,3 +35,4 @@
 data/
 build/
 .env/
+.vscode
