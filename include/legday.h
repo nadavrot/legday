@@ -11,6 +11,9 @@ namespace legday {
 /// Count the number of bits in a byte.
 uint8_t popcnt(uint8_t byte);
 
+/// Count the number of bits in a buffer.
+uint64_t popcnt(std::span<uint8_t> buffer);
+
 /// Convert a buffer to a transposed buffer. Each bit is extracted and placed
 /// consecutively. The size of the returned buffer is equal to the size of the
 // input buffer. The input buffer must be a multiple of 8.
@@ -18,7 +21,6 @@ std::vector<uint8_t> transpose(std::span<uint8_t> buffer);
 
 /// Reverses the transpose operation.
 std::vector<uint8_t> untranspose(std::span<uint8_t> in);
-} // namespace legday
 
 /// An arithmetic encoder that encodes one bit at a time, with a given
 /// probability expressed as a 16-bit integer.
@@ -58,5 +60,9 @@ public:
   /// Decode one bit with a probability 'prob' in the range 0..65536.
   std::optional<bool> decode(uint16_t prob);
 };
+
+void try_compress(std::span<uint8_t> input);
+
+} // namespace legday
 
 #endif // LIB_LEGDAY_H

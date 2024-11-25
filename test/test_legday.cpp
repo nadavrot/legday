@@ -79,12 +79,12 @@ TEST(LegdayTest, PopCnt0) {
 
 TEST(LegdayTest, BasicEncoders0) {
   std::vector<uint8_t> buffer;
-  BitonicEncoder encoder(buffer);
+  legday::BitonicEncoder encoder(buffer);
   for (int i = 0; i < 1000; i++) {
     encoder.encode(i % 2, 30000);
   }
   encoder.finalize();
-  BitonicDecoder decoder(buffer);
+  legday::BitonicDecoder decoder(buffer);
   for (int i = 0; i < 1000; i++) {
     auto bit = decoder.decode(30000);
     EXPECT_EQ(bit.has_value(), true);

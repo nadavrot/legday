@@ -1,6 +1,7 @@
 #include "legday.h"
 
 #include <cassert>
+#include <stdio.h>
 
 uint8_t legday::popcnt(uint8_t byte) {
   constexpr uint8_t bits[256] = {
@@ -17,6 +18,14 @@ uint8_t legday::popcnt(uint8_t byte) {
       4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8};
 
   return bits[byte];
+}
+
+uint64_t legday::popcnt(std::span<uint8_t> buffer) {
+  uint64_t result = 0;
+  for (auto byte : buffer) {
+    result += uint64_t(legday::popcnt(byte));
+  }
+  return result;
 }
 
 static constexpr uint8_t nthbit(uint8_t byte, size_t n) {
@@ -75,10 +84,10 @@ std::vector<uint8_t> legday::untranspose(std::span<uint8_t> in) {
 }
 
 /// Constructor:
-BitonicEncoder::BitonicEncoder(std::vector<uint8_t> &output)
+legday::BitonicEncoder::BitonicEncoder(std::vector<uint8_t> &output)
     : low_(0), high_(0xffffffff), output_(output) {}
 
-size_t BitonicEncoder::encode(bool bit, uint16_t prob) {
+size_t legday::BitonicEncoder::encode(bool bit, uint16_t prob) {
   assert(high_ > low_);
 
   // Figure out the mid point of the range, depending on the probability.
@@ -105,12 +114,12 @@ size_t BitonicEncoder::encode(bool bit, uint16_t prob) {
   return wrote;
 }
 
-size_t BitonicEncoder::finalize() {
+size_t legday::BitonicEncoder::finalize() {
   // Encode a zero-probability token which flushes the state.
   return encode(true, 0);
 }
 
-BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
+legday::BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
   assert(input.size() >= 4);
   cursor_ = 0;
   state_ = 0;
@@ -124,7 +133,7 @@ BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
 }
 
 /// Decode one bit with a probability 'prob' in the range 0..65536.
-std::optional<bool> BitonicDecoder::decode(uint16_t prob) {
+std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   assert(high_ > low_);
   assert(high_ >= state_ && low_ <= state_);
   assert(cursor_ <= input_.size());
@@ -159,4 +168,28 @@ std::optional<bool> BitonicDecoder::decode(uint16_t prob) {
   }
 
   return bit;
+}
+
+void legday::try_compress(std::span<uint8_t> input) {
+  assert(input.size() % 8 == 0);
+  std::vector<uint8_t> transposed = legday::transpose(input);
+  std::vector<uint8_t> output;
+
+  size_t slice_size = input.size() / 8;
+  for (int i = 0; i < 8; i++) {
+    std::span<uint8_t> slice(&transposed[i * slice_size], slice_size);
+    uint64_t ones = legday::popcnt(slice);
+    uint64_t bits = slice_size * 8;
+    uint16_t prob16 = (ones << 16) / bits;
+
+    BitonicEncoder encoder(output);
+    for (auto byte : transposed) {
+      for (int i = 0; i < 8; i++) {
+        encoder.encode(byte & 0x1, prob16);
+        byte >>= 1;
+      }
+    }
+    encoder.finalize();
+  }
+  printf("Compressed %zu bytes to %zu bytes\n", input.size(), output.size());
 }
