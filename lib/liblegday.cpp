@@ -57,3 +57,88 @@ std::vector<uint8_t> legday::untranspose(std::span<uint8_t> in) {
 
   return result;
 }
+
+/// Constructor:
+BitonicEncoder::BitonicEncoder(std::vector<uint8_t> &output)
+    : low_(0), high_(0xffffffff), output_(output) {}
+
+size_t BitonicEncoder::encode(bool bit, uint16_t prob) {
+  assert(high_ > low_);
+
+  // Figure out the mid point of the range, depending on the probability.
+  uint64_t gap = (high_ - low_);
+  uint64_t scale = (gap * uint64_t(prob)) >> 16;
+  uint32_t mid = low_ + uint32_t(scale);
+  assert(high_ > mid && mid >= low_);
+
+  // Select the sub-range based on the bit.
+  if (bit) {
+    high_ = mid;
+  } else {
+    low_ = mid + 1;
+  }
+
+  size_t wrote = 0;
+  // Write the identical leading bytes.
+  while ((high_ ^ low_) < (1 << 24)) {
+    output_.push_back(uint8_t(high_ >> 24));
+    high_ = (high_ << 8) + 0xff;
+    low_ <<= 8;
+    wrote += 1;
+  }
+  return wrote;
+}
+
+size_t BitonicEncoder::finalize() {
+  // Encode a zero-probability token which flushes the state.
+  return encode(true, 0);
+}
+
+BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
+  assert(input.size() >= 4);
+  cursor_ = 0;
+  state_ = 0;
+  for (int i = 0; i < 4; i++) {
+    state_ = (state_ << 8) | uint32_t(input[cursor_]);
+    cursor_++;
+  }
+  low_ = 0;
+  high_ = 0xffffffff;
+}
+
+/// Decode one bit with a probability 'prob' in the range 0..65536.
+std::optional<bool> BitonicDecoder::decode(uint16_t prob) {
+  assert(high_ > low_);
+  assert(high_ >= state_ && low_ <= state_);
+
+  // Figure out the mid point of the range, depending on the probability.
+  uint64_t gap = (high_ - low_);
+  uint64_t scale = (gap * uint64_t(prob)) >> 16;
+  uint32_t mid = low_ + uint32_t(scale);
+  assert(high_ > mid && mid >= low_);
+
+  // Figure out which bit we extract based on where the state falls in the
+  // range.
+  bool bit = state_ <= mid;
+
+  // Select the sub-range based on the bit.
+  if (bit) {
+    high_ = mid;
+  } else {
+    low_ = mid + 1;
+  }
+
+  // Clear the identical leading bytes.
+  while ((high_ ^ low_) < (1 << 24)) {
+    // Not enough bits in the input.
+    if (cursor_ == input_.size()) {
+      return std::nullopt;
+    }
+    high_ = (high_ << 8) + 0xff;
+    low_ <<= 8;
+    state_ = (state_ << 8) + uint32_t(input_[cursor_]);
+    cursor_ += 1;
+  }
+
+  return bit;
+}
