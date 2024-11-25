@@ -7,6 +7,10 @@
 #include <vector>
 
 namespace legday {
+
+/// Count the number of bits in a byte.
+uint8_t popcnt(uint8_t byte);
+
 /// Convert a buffer to a transposed buffer. Each bit is extracted and placed
 /// consecutively. The size of the returned buffer is equal to the size of the
 // input buffer. The input buffer must be a multiple of 8.
