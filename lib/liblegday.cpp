@@ -104,12 +104,14 @@ BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
   }
   low_ = 0;
   high_ = 0xffffffff;
+  input_ = input;
 }
 
 /// Decode one bit with a probability 'prob' in the range 0..65536.
 std::optional<bool> BitonicDecoder::decode(uint16_t prob) {
   assert(high_ > low_);
   assert(high_ >= state_ && low_ <= state_);
+  assert(cursor_ <= input_.size());
 
   // Figure out the mid point of the range, depending on the probability.
   uint64_t gap = (high_ - low_);

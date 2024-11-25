@@ -68,3 +68,18 @@ TEST(LegdayTest, BasicTransposeTest3) {
     }
   }
 }
+
+TEST(LegdayTest, BasicEncoders0) {
+  std::vector<uint8_t> buffer;
+  BitonicEncoder encoder(buffer);
+  for (int i = 0; i < 1000; i++) {
+    encoder.encode(i % 2, 30000);
+  }
+  encoder.finalize();
+  BitonicDecoder decoder(buffer);
+  for (int i = 0; i < 1000; i++) {
+    auto bit = decoder.decode(30000);
+    EXPECT_EQ(bit.has_value(), true);
+    EXPECT_EQ(bit.value(), i % 2);
+  }
+}
