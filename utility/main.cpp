@@ -5,15 +5,30 @@
 #include <vector>
 
 int main(int argc, char *argv[]) {
-  if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " <filename>\n";
+  if (argc < 4) {
+    std::cerr << "Usage: " << argv[0]
+              << " [compress|decompress|verify] <input> <output>\n";
     return 1;
   }
 
-  std::ifstream input_file(argv[1], std::ios::binary);
+  bool compress = false;
+  bool verify = false;
+  if (std::string(argv[1]) == "compress") {
+    compress = true;
+  } else if (std::string(argv[1]) == "decompress") {
+    compress = false;
+  } else if (std::string(argv[1]) == "verify") {
+    compress = true;
+    verify = true;
+  } else {
+    std::cerr << "Error: unknown command '" << argv[1] << "'\n";
+    return 1;
+  }
+
+  std::ifstream input_file(argv[2], std::ios::binary);
 
   if (!input_file) {
-    std::cerr << "Error: could not open file '" << argv[1] << "'\n";
+    std::cerr << "Error: could not open file '" << argv[2] << "'\n";
     return 1;
   }
 
@@ -21,16 +36,25 @@ int main(int argc, char *argv[]) {
   std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input_file)),
                              std::istreambuf_iterator<char>());
 
-  std::vector<uint8_t> compressed = legday::compress(bytes);
-  std::vector<uint8_t> decompressed = legday::decompress(compressed);
+  std::vector<uint8_t> output;
 
-  // Check that the decompressed data matches the original.
-  if (bytes != decompressed) {
-    std::cerr << "Error: decompressed data does not match original\n";
+  if (compress) {
+    output = legday::compress(bytes);
+    if (verify) {
+      auto decompressed = legday::decompress(output);
+      if (decompressed != bytes) {
+        std::cerr << "Error: verification failed\n";
+        return 1;
+      }
+    }
+  } else {
+    output = legday::decompress(bytes);
+  }
+  std::ofstream output_file(argv[3], std::ios::binary);
+  if (!output_file) {
+    std::cerr << "Error: could not open file '" << argv[3] << "'\n";
     return 1;
   }
-
-  std::cout << "Success\n";
-
+  output_file.write(reinterpret_cast<char *>(output.data()), output.size());
   return 0;
 }
