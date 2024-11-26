@@ -74,3 +74,23 @@ TEST(LegdayTest, BasicEncoders0) {
     EXPECT_EQ(bit.value(), i % 2);
   }
 }
+
+TEST(LegdayTest, EncoderDecoder0) {
+  bool buffer[24] = {
+      1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1,
+  };
+  std::vector<uint8_t> coded;
+  BitonicEncoder encoder(coded);
+
+  for (bool bit : buffer) {
+    encoder.encode(bit, 30000);
+  }
+  encoder.finalize();
+
+  BitonicDecoder decoder(coded);
+  for (bool bit : buffer) {
+    auto bit2 = decoder.decode(30000);
+    EXPECT_EQ(bit2.has_value(), true);
+    EXPECT_EQ(bit2.value(), bit);
+  }
+}
