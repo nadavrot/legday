@@ -32,58 +32,6 @@ static constexpr uint8_t nthbit(uint8_t byte, size_t n) {
   return (byte >> n) & 1;
 }
 
-std::vector<uint8_t> legday::transpose(std::span<uint8_t> buffer) {
-  assert(buffer.size() % 8 == 0);
-  std::vector<uint8_t> result(buffer.size(), 0);
-  // The transposed buffer is split into 8 parts.
-  size_t num_parts = buffer.size() / 8;
-
-  // For each destination byte in a part of the transposed buffer.
-  for (size_t dest = 0; dest < num_parts; dest++) {
-    // The source offset is multiplied by 8 because we pack 8 bytes at once.
-    size_t src = dest * 8;
-
-    // For each bit in the source bytes.
-    for (int bit = 0; bit < 8; bit++) {
-      result[dest + bit * num_parts] |= nthbit(buffer[src + 0], bit) << 0 |
-                                        nthbit(buffer[src + 1], bit) << 1 |
-                                        nthbit(buffer[src + 2], bit) << 2 |
-                                        nthbit(buffer[src + 3], bit) << 3 |
-                                        nthbit(buffer[src + 4], bit) << 4 |
-                                        nthbit(buffer[src + 5], bit) << 5 |
-                                        nthbit(buffer[src + 6], bit) << 6 |
-                                        nthbit(buffer[src + 7], bit) << 7;
-    }
-  }
-  return result;
-}
-
-std::vector<uint8_t> legday::untranspose(std::span<uint8_t> in) {
-  assert(in.size() % 8 == 0);
-  std::vector<uint8_t> result(in.size(), 0);
-
-  // The transposed buffer is split into 8 parts.
-  size_t num_parts = in.size() / 8;
-
-  // For each destination byte in a part of the transposed buffer.
-  for (size_t dest = 0; dest < num_parts; dest++) {
-    // For each bit:
-    for (int bit = 0; bit < 8; bit++) {
-      result[dest * 8 + bit] |= nthbit(in[dest + 0 * num_parts], bit) << 0 |
-                                nthbit(in[dest + 1 * num_parts], bit) << 1 |
-                                nthbit(in[dest + 2 * num_parts], bit) << 2 |
-                                nthbit(in[dest + 3 * num_parts], bit) << 3 |
-                                nthbit(in[dest + 4 * num_parts], bit) << 4 |
-                                nthbit(in[dest + 5 * num_parts], bit) << 5 |
-                                nthbit(in[dest + 6 * num_parts], bit) << 6 |
-                                nthbit(in[dest + 7 * num_parts], bit) << 7;
-    }
-  }
-
-  return result;
-}
-
-/// Constructor:
 legday::BitonicEncoder::BitonicEncoder(std::vector<uint8_t> &output)
     : low_(0), high_(0xffffffff), output_(output) {}
 
@@ -132,7 +80,6 @@ legday::BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
   input_ = input;
 }
 
-/// Decode one bit with a probability 'prob' in the range 0..65536.
 std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   assert(high_ > low_);
   assert(high_ >= state_ && low_ <= state_);
@@ -172,24 +119,6 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
 
 void legday::try_compress(std::span<uint8_t> input) {
   assert(input.size() % 8 == 0);
-  std::vector<uint8_t> transposed = legday::transpose(input);
   std::vector<uint8_t> output;
-
-  size_t slice_size = input.size() / 8;
-  for (int i = 0; i < 8; i++) {
-    std::span<uint8_t> slice(&transposed[i * slice_size], slice_size);
-    uint64_t ones = legday::popcnt(slice);
-    uint64_t bits = slice_size * 8;
-    uint16_t prob16 = (ones << 16) / bits;
-
-    BitonicEncoder encoder(output);
-    for (auto byte : transposed) {
-      for (int i = 0; i < 8; i++) {
-        encoder.encode(byte & 0x1, prob16);
-        byte >>= 1;
-      }
-    }
-    encoder.finalize();
-  }
   printf("Compressed %zu bytes to %zu bytes\n", input.size(), output.size());
 }

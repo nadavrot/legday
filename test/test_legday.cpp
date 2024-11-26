@@ -2,89 +2,72 @@
 #include "legday.h"
 #include <gtest/gtest.h>
 
-int add(int a, int b) { return a + b; }
+using namespace legday;
 
-TEST(LegdayTest, BasicTransposeTest0) {
-  uint8_t buffer[8] = {1, 1, 1, 1, 1, 1, 1, 1};
-  std::vector<uint8_t> transposed = legday::transpose(buffer);
-  std::vector<uint8_t> orginal = legday::untranspose(transposed);
+TEST(LegdayTest, TestStream0) {
+  uint8_t buffer[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+  Stream<8> stream(buffer);
 
-  EXPECT_EQ(transposed.size(), orginal.size());
-  EXPECT_EQ(orginal.size(), 8);
+  EXPECT_EQ(stream.get(0, 0), 1);
+  EXPECT_EQ(stream.get(0, 1), 0);
+  EXPECT_EQ(stream.get(0, 2), 0);
+  EXPECT_EQ(stream.get(0, 3), 0);
+  EXPECT_EQ(stream.get(1, 0), 0);
+  EXPECT_EQ(stream.get(1, 1), 1);
+  EXPECT_EQ(stream.get(1, 2), 0);
+  EXPECT_EQ(stream.get(1, 3), 0);
 
-  EXPECT_EQ(transposed[0], 0xff);
-  EXPECT_EQ(transposed[1], 0x00);
-
-  for (int i = 0; i < 8; i++) {
-    EXPECT_EQ(buffer[i], orginal[i]);
-  }
+  Stream<16> stream2(buffer);
+  EXPECT_EQ(stream2.get(0, 0), 1);
+  EXPECT_EQ(stream2.get(0, 1), 0);
+  EXPECT_EQ(stream2.get(0, 8), 0);
+  EXPECT_EQ(stream2.get(0, 9), 1);
+  EXPECT_EQ(stream2.get(1, 0), 0);
+  EXPECT_EQ(stream2.get(1, 2), 1);
 }
 
-TEST(LegdayTest, BasicTransposeTest1) {
-  uint8_t buffer[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-  std::vector<uint8_t> transposed = legday::transpose(buffer);
-  std::vector<uint8_t> orginal = legday::untranspose(transposed);
-
-  EXPECT_EQ(transposed.size(), orginal.size());
-  EXPECT_EQ(orginal.size(), 8);
-
-  for (int i = 0; i < 8; i++) {
-    EXPECT_EQ(buffer[i], orginal[i]);
-  }
-}
-
-TEST(LegdayTest, BasicTransposeTest2) {
-  uint8_t buffer[16] = {0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7};
-  std::vector<uint8_t> transposed = legday::transpose(buffer);
-  std::vector<uint8_t> orginal = legday::untranspose(transposed);
-
-  EXPECT_EQ(transposed.size(), orginal.size());
-  EXPECT_EQ(orginal.size(), 16);
-
-  for (int i = 0; i < orginal.size(); i++) {
-    EXPECT_EQ(buffer[i], orginal[i]);
-  }
-
-  EXPECT_EQ(transposed[0], transposed[1]);
-}
-
-TEST(LegdayTest, BasicTransposeTest3) {
-  uint8_t buffer[16] = {
+TEST(LegdayTest, TestStream1) {
+  uint8_t buffer[4] = {
+      1,
       0,
+      3,
+      1,
   };
+  Stream<8> stream(buffer);
 
-  for (size_t iter = 0; iter < 5000; iter++) {
+  Stream<8>::ArrayPopcntTy ones;
+  stream.popcnt(ones);
+  EXPECT_EQ(ones[0], 3);
+  EXPECT_EQ(ones[1], 1);
+  EXPECT_EQ(ones[2], 0);
+  EXPECT_EQ(ones[3], 0);
 
-    // Randomize buffer:
-    for (int i = 0; i < 16; i++) {
-      buffer[i] = ((iter * 7141) + i * 13) & 0xff;
-    }
+  Stream<16> stream2(buffer);
 
-    std::vector<uint8_t> transposed = legday::transpose(buffer);
-    std::vector<uint8_t> orginal = legday::untranspose(transposed);
-
-    for (int i = 0; i < orginal.size(); i++) {
-      EXPECT_EQ(buffer[i], orginal[i]);
-    }
-  }
+  Stream<16>::ArrayPopcntTy ones2;
+  stream2.popcnt(ones2);
+  EXPECT_EQ(ones2[0], 2);
+  EXPECT_EQ(ones2[1], 1);
+  EXPECT_EQ(ones2[8], 1);
+  EXPECT_EQ(ones2[9], 0);
 }
 
 TEST(LegdayTest, PopCnt0) {
-  EXPECT_EQ(legday::popcnt(0), 0);
-  EXPECT_EQ(legday::popcnt(1), 1);
-  EXPECT_EQ(legday::popcnt(2), 1);
-  EXPECT_EQ(legday::popcnt(3), 2);
-  EXPECT_EQ(legday::popcnt(0xff), 8);
+  EXPECT_EQ(popcnt(0), 0);
+  EXPECT_EQ(popcnt(1), 1);
+  EXPECT_EQ(popcnt(2), 1);
+  EXPECT_EQ(popcnt(3), 2);
+  EXPECT_EQ(popcnt(0xff), 8);
 }
 
 TEST(LegdayTest, BasicEncoders0) {
   std::vector<uint8_t> buffer;
-  legday::BitonicEncoder encoder(buffer);
+  BitonicEncoder encoder(buffer);
   for (int i = 0; i < 1000; i++) {
     encoder.encode(i % 2, 30000);
   }
   encoder.finalize();
-  legday::BitonicDecoder decoder(buffer);
+  BitonicDecoder decoder(buffer);
   for (int i = 0; i < 1000; i++) {
     auto bit = decoder.decode(30000);
     EXPECT_EQ(bit.has_value(), true);

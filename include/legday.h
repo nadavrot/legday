@@ -14,13 +14,52 @@ uint8_t popcnt(uint8_t byte);
 /// Count the number of bits in a buffer.
 uint64_t popcnt(std::span<uint8_t> buffer);
 
-/// Convert a buffer to a transposed buffer. Each bit is extracted and placed
-/// consecutively. The size of the returned buffer is equal to the size of the
-// input buffer. The input buffer must be a multiple of 8.
-std::vector<uint8_t> transpose(std::span<uint8_t> buffer);
+template <unsigned NumChannels> class Stream {
+  std::span<uint8_t> buffer_;
+  static_assert(NumChannels % 8 == 0, "NumChannels must be a multiple of 8");
 
-/// Reverses the transpose operation.
-std::vector<uint8_t> untranspose(std::span<uint8_t> in);
+public:
+  Stream(std::span<uint8_t> buffer) : buffer_(buffer) {}
+
+  /// Sets the 'channel'-th bit in word at 'offset' to the value 'value'.
+  void set(size_t offset, uint8_t channel, bool value) {
+    size_t num_channels_bytes = NumChannels / 8;
+    // Find the location of the word.
+    size_t base = (offset * num_channels_bytes);
+    // Figure out which byte in the word.
+    size_t byte_idx = channel / 8;
+    uint8_t bit = (channel % 8);
+    buffer_[base + byte_idx] |= (value & 0x1) << bit;
+  }
+
+  /// Returns the 'channel'-th bit in word at 'offset'.
+  bool get(size_t offset, uint8_t channel) {
+    size_t num_channels_bytes = NumChannels / 8;
+    // Find the location of the word.
+    size_t base = (offset * num_channels_bytes);
+    // Figure out which byte in the word.
+    size_t byte_idx = channel / 8;
+    uint8_t bit = (channel % 8);
+    return (buffer_[base + byte_idx] >> bit) & 0x1;
+  }
+
+  /// Storage for the popcnt result.
+  using ArrayPopcntTy = int32_t[NumChannels];
+
+  /// Fill the array 'ones' with the number of bits in each channel.
+  void popcnt(ArrayPopcntTy &ones) {
+    size_t num_channels_bytes = NumChannels / 8;
+    for (int i = 0; i < NumChannels; i++) {
+      ones[i] = 0;
+    }
+    for (size_t offset = 0; offset < buffer_.size() / num_channels_bytes;
+         offset++) {
+      for (int channel = 0; channel < NumChannels; channel++) {
+        ones[channel] += get(offset, channel);
+      }
+    }
+  }
+};
 
 /// An arithmetic encoder that encodes one bit at a time, with a given
 /// probability expressed as a 16-bit integer.
