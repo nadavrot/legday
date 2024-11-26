@@ -3,31 +3,6 @@
 #include <cassert>
 #include <stdio.h>
 
-uint8_t legday::popcnt(uint8_t byte) {
-  constexpr uint8_t bits[256] = {
-      0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4,
-      2, 3, 3, 4, 3, 4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
-      2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 1, 2, 2, 3, 2, 3, 3, 4,
-      2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
-      2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6,
-      4, 5, 5, 6, 5, 6, 6, 7, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,
-      2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 2, 3, 3, 4, 3, 4, 4, 5,
-      3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
-      2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6,
-      4, 5, 5, 6, 5, 6, 6, 7, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7,
-      4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8};
-
-  return bits[byte];
-}
-
-uint64_t legday::popcnt(std::span<uint8_t> buffer) {
-  uint64_t result = 0;
-  for (auto byte : buffer) {
-    result += uint64_t(legday::popcnt(byte));
-  }
-  return result;
-}
-
 static constexpr uint8_t nthbit(uint8_t byte, size_t n) {
   return (byte >> n) & 1;
 }
@@ -117,8 +92,16 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   return bit;
 }
 
+void add_bias_to_second_byte(std::span<uint8_t> input, uint8_t bias) {
+  for (size_t i = 0; i < input.size() / 2; i++) {
+    input[i * 2 + 1] += bias;
+  }
+}
+
 void legday::try_compress(std::span<uint8_t> input) {
   constexpr int CHANNELS = 16;
+
+  add_bias_to_second_byte(input, 127);
 
   assert(input.size() % CHANNELS == 0);
   std::vector<uint8_t> output;
@@ -129,7 +112,8 @@ void legday::try_compress(std::span<uint8_t> input) {
   for (int i = 0; i < CHANNELS; i++) {
     BitonicEncoder encoder(output);
     uint16_t prob = uint16_t((ones[i] * 65535) / stream.size());
-    printf("Channel %d: %lu/%zu (%d)\n", i, ones[i], stream.size(), prob);
+    printf("Channel %d: %lu/%zu (%d - %f)\n", i, ones[i], stream.size(), prob,
+           prob / 65535.0);
     for (size_t j = 0; j < stream.size(); j++) {
       bool bit = stream.get(j, i);
       encoder.encode(bit, prob);

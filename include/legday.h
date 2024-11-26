@@ -8,9 +8,6 @@
 
 namespace legday {
 
-/// Count the number of bits in a byte.
-uint8_t popcnt(uint8_t byte);
-
 /// Count the number of bits in a buffer.
 uint64_t popcnt(std::span<uint8_t> buffer);
 

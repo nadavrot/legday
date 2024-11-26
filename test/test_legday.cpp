@@ -52,14 +52,6 @@ TEST(LegdayTest, TestStream1) {
   EXPECT_EQ(ones2[9], 0);
 }
 
-TEST(LegdayTest, PopCnt0) {
-  EXPECT_EQ(popcnt(0), 0);
-  EXPECT_EQ(popcnt(1), 1);
-  EXPECT_EQ(popcnt(2), 1);
-  EXPECT_EQ(popcnt(3), 2);
-  EXPECT_EQ(popcnt(0xff), 8);
-}
-
 TEST(LegdayTest, BasicEncoders0) {
   std::vector<uint8_t> buffer;
   BitonicEncoder encoder(buffer);
