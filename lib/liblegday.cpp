@@ -92,7 +92,8 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   return bit;
 }
 
-float get_correlation_between_bits(std::span<uint8_t> input, int i, int j) {
+static float get_correlation_between_bits(std::span<uint8_t> input, int i,
+                                          int j) {
   legday::Stream<16> stream(input);
   if (i < j) {
     return 0;
@@ -105,7 +106,7 @@ float get_correlation_between_bits(std::span<uint8_t> input, int i, int j) {
   return float(correlation) / float(stream.size());
 }
 
-void print_correlation_matrix(std::span<uint8_t> input) {
+static void print_correlation_matrix(std::span<uint8_t> input) {
   for (int i = 0; i < 10; i++) {
     for (int j = 0; j < 10; j++) {
       printf("(%d, %d) %0.2f ", i, j,
@@ -115,8 +116,8 @@ void print_correlation_matrix(std::span<uint8_t> input) {
   }
 }
 
-float get_correlation_between_consecutive_bits(std::span<uint8_t> input,
-                                               int i) {
+static float get_correlation_between_consecutive_bits(std::span<uint8_t> input,
+                                                      int i) {
   bool prev = false;
   legday::Stream<16> stream(input);
 
@@ -130,14 +131,14 @@ float get_correlation_between_consecutive_bits(std::span<uint8_t> input,
   return float(correlation) / float(stream.size());
 }
 
-void print_correlation_previous_bit(std::span<uint8_t> input) {
+static void print_correlation_previous_bit(std::span<uint8_t> input) {
   for (int i = 0; i < 16; i++) {
     printf("%0.2f ", get_correlation_between_consecutive_bits(input, i));
   }
   printf("\n");
 }
 
-void add_bias_to_second_byte(std::span<uint8_t> input, uint8_t bias) {
+static void add_bias_to_second_byte(std::span<uint8_t> input, uint8_t bias) {
   // Xor the low exponent bit with the highest mantissa bit.
   for (size_t i = 0; i < input.size() / 2; i++) {
     unsigned low_exp = ((input[i * 2 + 1] >> 1) & 0x1);
@@ -153,8 +154,6 @@ void legday::try_compress(std::span<uint8_t> input) {
   constexpr int CHANNELS = 16;
 
   add_bias_to_second_byte(input, 127);
-  print_correlation_previous_bit(input);
-  print_correlation_matrix(input);
 
   assert(input.size() % CHANNELS == 0);
   std::vector<uint8_t> output;
