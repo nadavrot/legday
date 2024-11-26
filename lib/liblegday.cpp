@@ -118,7 +118,24 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
 }
 
 void legday::try_compress(std::span<uint8_t> input) {
-  assert(input.size() % 8 == 0);
+  constexpr int CHANNELS = 16;
+
+  assert(input.size() % CHANNELS == 0);
   std::vector<uint8_t> output;
+  Stream<CHANNELS>::ArrayPopcntTy ones;
+  Stream<CHANNELS> stream(input);
+  stream.popcnt(ones);
+
+  for (int i = 0; i < CHANNELS; i++) {
+    BitonicEncoder encoder(output);
+    uint16_t prob = uint16_t((ones[i] * 65535) / stream.size());
+    printf("Channel %d: %lu/%zu (%d)\n", i, ones[i], stream.size(), prob);
+    for (size_t j = 0; j < stream.size(); j++) {
+      bool bit = stream.get(j, i);
+      encoder.encode(bit, prob);
+    }
+    encoder.finalize();
+  }
+
   printf("Compressed %zu bytes to %zu bytes\n", input.size(), output.size());
 }

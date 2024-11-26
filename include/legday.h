@@ -21,6 +21,9 @@ template <unsigned NumChannels> class Stream {
 public:
   Stream(std::span<uint8_t> buffer) : buffer_(buffer) {}
 
+  /// Returns the number of words in the stream.
+  size_t size() { return buffer_.size() / (NumChannels / 8); }
+
   /// Sets the 'channel'-th bit in word at 'offset' to the value 'value'.
   void set(size_t offset, uint8_t channel, bool value) {
     size_t num_channels_bytes = NumChannels / 8;
@@ -44,7 +47,7 @@ public:
   }
 
   /// Storage for the popcnt result.
-  using ArrayPopcntTy = int32_t[NumChannels];
+  using ArrayPopcntTy = uint64_t[NumChannels];
 
   /// Fill the array 'ones' with the number of bits in each channel.
   void popcnt(ArrayPopcntTy &ones) {
