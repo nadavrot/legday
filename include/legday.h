@@ -100,6 +100,24 @@ public:
   std::optional<bool> decode(uint16_t prob);
 };
 
+template <typename T>
+void push(std::vector<uint8_t> &output, T value) {
+  for (int i = 0; i < sizeof(T); i++) {
+    output.push_back(uint8_t(value >> (i * 8)));
+  }
+}
+
+template <typename T>
+T pop(std::vector<uint8_t> &output) {
+  T value = 0;
+  for (int i = 0; i < sizeof(T); i++) {
+    value = (value << 8) | output.back();
+    output.pop_back();
+  }
+  return value;
+}
+
+
 void try_compress(std::span<uint8_t> input);
 
 } // namespace legday

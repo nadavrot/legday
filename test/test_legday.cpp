@@ -4,6 +4,14 @@
 
 using namespace legday;
 
+TEST(LegdayTest, PushPop0) {
+  std::vector<uint8_t> buffer;
+  for (int i = 0; i < 1000; i++) {
+    push<uint16_t>(buffer, i);
+    EXPECT_EQ(pop<uint16_t>(buffer), i);
+  }
+}
+
 TEST(LegdayTest, TestStream0) {
   uint8_t buffer[8] = {1, 2, 4, 8, 16, 32, 64, 128};
   Stream<8> stream(buffer);
