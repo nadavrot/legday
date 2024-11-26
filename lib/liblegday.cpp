@@ -138,15 +138,19 @@ static void print_correlation_previous_bit(std::span<uint8_t> input) {
   printf("\n");
 }
 
-static void add_bias_to_second_byte(std::span<uint8_t> input, uint8_t bias) {
+static void add_bias_to_second_byte(std::span<uint8_t> input, uint8_t bias,
+                                    bool undo) {
   // Xor the low exponent bit with the highest mantissa bit.
   for (size_t i = 0; i < input.size() / 2; i++) {
-    unsigned low_exp = ((input[i * 2 + 1] >> 1) & 0x1);
-    input[i * 2] ^= low_exp << 7;
-  }
-
-  for (size_t i = 0; i < input.size() / 2; i++) {
-    input[i * 2 + 1] += bias;
+    if (!undo) {
+      unsigned low_exp = ((input[i * 2 + 1] >> 1) & 0x1);
+      input[i * 2] ^= low_exp << 7;
+      input[i * 2 + 1] += bias;
+    } else {
+      input[i * 2 + 1] -= bias;
+      unsigned low_exp = ((input[i * 2 + 1] >> 1) & 0x1);
+      input[i * 2] ^= low_exp << 7;
+    }
   }
 }
 
@@ -161,7 +165,7 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input) {
   push<uint8_t>(output, CHANNELS);
   push<uint32_t>(output, (input.size() * 8) / CHANNELS);
 
-  add_bias_to_second_byte(input, 127);
+  add_bias_to_second_byte(input, 127, false);
 
   Stream<CHANNELS>::ArrayPopcntTy ones;
   Stream<CHANNELS> stream(input);
@@ -199,6 +203,8 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input) {
 
   printf("Compressed %zu bytes to %zu bytes (ratio %03f)\n", input.size(),
          output.size(), float(output.size()) / input.size());
+
+  add_bias_to_second_byte(input, 127, true); // Fix the input.
   return output;
 }
 
@@ -242,6 +248,6 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
   }
 
   // Undo the transformation.
-  add_bias_to_second_byte(input, -127);
+  add_bias_to_second_byte(output, 127, true);
   return output;
 }

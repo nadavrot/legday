@@ -46,6 +46,8 @@ int main(int argc, char *argv[]) {
         std::cerr << "Error: verification failed\n";
         return 1;
       }
+
+      std::cout << "Verification succeeded\n";
     }
   } else {
     output = legday::decompress(bytes);
