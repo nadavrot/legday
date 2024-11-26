@@ -21,7 +21,16 @@ int main(int argc, char *argv[]) {
   std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input_file)),
                              std::istreambuf_iterator<char>());
 
-  legday::try_compress(bytes);
+  std::vector<uint8_t> compressed = legday::compress(bytes);
+  std::vector<uint8_t> decompressed = legday::decompress(compressed);
+
+  // Check that the decompressed data matches the original.
+  if (bytes != decompressed) {
+    std::cerr << "Error: decompressed data does not match original\n";
+    return 1;
+  }
+
+  std::cout << "Success\n";
 
   return 0;
 }

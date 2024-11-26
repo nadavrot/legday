@@ -150,30 +150,98 @@ static void add_bias_to_second_byte(std::span<uint8_t> input, uint8_t bias) {
   }
 }
 
-void legday::try_compress(std::span<uint8_t> input) {
-  constexpr int CHANNELS = 16;
+std::vector<uint8_t> legday::compress(std::span<uint8_t> input) {
+  constexpr uint8_t CHANNELS = 16;
+  assert(input.size() % CHANNELS == 0);
+  std::vector<uint8_t> output;
+
+  // FORMAT: Magic, Kind, num_channels, num_words.
+  push<uint32_t>(output, 'LGDY');
+  push<uint8_t>(output, Layout::BF16);
+  push<uint8_t>(output, CHANNELS);
+  push<uint32_t>(output, (input.size() * 8) / CHANNELS);
 
   add_bias_to_second_byte(input, 127);
 
-  assert(input.size() % CHANNELS == 0);
-  std::vector<uint8_t> output;
   Stream<CHANNELS>::ArrayPopcntTy ones;
   Stream<CHANNELS> stream(input);
   stream.popcnt(ones);
+
+  uint16_t prob[CHANNELS] = {0};
+  for (int i = 0; i < CHANNELS; i++) {
+    prob[i] = uint16_t((ones[i] * 65535) / stream.size());
+  }
+
+  // FORMAT: One uint16_t per channel, the probability of a bit being 1.
+  for (int i = 0; i < CHANNELS; i++) {
+    push<uint16_t>(output, prob[i]);
+  }
+
+  // print the probabilities.
+  for (int i = 0; i < CHANNELS; i++) {
+    printf("Channel %d: Prob :%d\n", i, prob[i]);
+  }
+
+  printf("Words: %d\n", stream.size());
   unsigned prev = 0;
   for (int i = 0; i < CHANNELS; i++) {
     BitonicEncoder encoder(output);
-    uint16_t prob = uint16_t((ones[i] * 65535) / stream.size());
 
     for (size_t j = 0; j < stream.size(); j++) {
       bool bit = stream.get(j, i);
-      encoder.encode(bit, prob);
+      encoder.encode(bit, prob[i]);
     }
     encoder.finalize();
     printf("Channel %d: %lu/%zu (%d - %f) - %lu\n", i, ones[i], stream.size(),
-           prob, prob / 65535.0, output.size() - prev);
+           prob[i], prob[i] / 65535.0, output.size() - prev);
     prev = output.size();
   }
 
-  printf("Compressed %zu bytes to %zu bytes\n", input.size(), output.size());
+  printf("Compressed %zu bytes to %zu bytes (ratio %03f)\n", input.size(),
+         output.size(), float(output.size()) / input.size());
+  return output;
+}
+
+std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
+  constexpr uint8_t CHANNELS = 16;
+
+  // FORMAT: Magic, Kind, num_channels, num_words.
+  uint32_t magic = legday::read<uint32_t>(input, 0);
+  uint8_t kind = legday::read<uint8_t>(input, 4);
+  uint8_t channels = legday::read<uint8_t>(input, 5);
+  uint32_t words = legday::read<uint32_t>(input, 6);
+  assert(magic == 'LGDY');
+  assert(kind == Layout::BF16);
+  assert(channels == CHANNELS);
+  input = input.subspan(10);
+
+  // Read the probability of each channel.
+  uint16_t prob[CHANNELS] = {0};
+  for (int i = 0; i < CHANNELS; i++) {
+    prob[i] = legday::read<uint16_t>(input, 0);
+    input = input.subspan(2);
+  }
+
+  // print the probabilities.
+  for (int i = 0; i < CHANNELS; i++) {
+    printf("Channel %d: Prob :%d\n", i, prob[i]);
+  }
+
+  std::vector<uint8_t> output(words * (CHANNELS / 8), 0);
+  Stream<CHANNELS> stream(output);
+
+  for (int i = 0; i < CHANNELS; i++) {
+    BitonicDecoder decoder(input);
+
+    for (size_t w = 0; w < words; w++) {
+      auto bit = decoder.decode(prob[i]);
+      assert(bit.has_value());
+      stream.set(w, i, bit.value());
+    }
+    input = input.subspan(decoder.consumed());
+  }
+
+  // Undo the transformation.
+  add_bias_to_second_byte(input, -127);
+  return output;
 }

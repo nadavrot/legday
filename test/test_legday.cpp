@@ -8,7 +8,8 @@ TEST(LegdayTest, PushPop0) {
   std::vector<uint8_t> buffer;
   for (int i = 0; i < 1000; i++) {
     push<uint16_t>(buffer, i);
-    EXPECT_EQ(pop<uint16_t>(buffer), i);
+    EXPECT_EQ(read<uint16_t>(buffer, 0), i);
+    buffer.clear();
   }
 }
 

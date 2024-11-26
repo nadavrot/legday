@@ -8,6 +8,17 @@
 
 namespace legday {
 
+enum Layout {
+  UNKNOWN,
+  FP32,
+  FP16,
+  BF16,
+  FP8,
+  INT8,
+};
+
+constexpr uint8_t channels_for_layout[6] = {32, 32, 16, 16, 8, 8};
+
 /// Count the number of bits in a buffer.
 uint64_t popcnt(std::span<uint8_t> buffer);
 
@@ -19,7 +30,7 @@ public:
   Stream(std::span<uint8_t> buffer) : buffer_(buffer) {}
 
   /// Returns the number of words in the stream.
-  size_t size() { return buffer_.size() / (NumChannels / 8); }
+  size_t size() { return (buffer_.size() * 8) / NumChannels; }
 
   /// Sets the 'channel'-th bit in word at 'offset' to the value 'value'.
   void set(size_t offset, uint8_t channel, bool value) {
@@ -98,27 +109,27 @@ public:
 
   /// Decode one bit with a probability 'prob' in the range 0..65536.
   std::optional<bool> decode(uint16_t prob);
+
+  /// Return the number of bytes consumed.
+  size_t consumed() { return cursor_; }
 };
 
-template <typename T>
-void push(std::vector<uint8_t> &output, T value) {
+template <typename T> void push(std::vector<uint8_t> &output, T value) {
   for (int i = 0; i < sizeof(T); i++) {
     output.push_back(uint8_t(value >> (i * 8)));
   }
 }
 
-template <typename T>
-T pop(std::vector<uint8_t> &output) {
+template <typename T> T read(std::span<uint8_t> input, size_t offset) {
   T value = 0;
-  for (int i = 0; i < sizeof(T); i++) {
-    value = (value << 8) | output.back();
-    output.pop_back();
+  for (int i = sizeof(T) - 1; i >= 0; i--) {
+    value = (value << 8) | input[offset + i];
   }
   return value;
 }
 
-
-void try_compress(std::span<uint8_t> input);
+std::vector<uint8_t> compress(std::span<uint8_t> input);
+std::vector<uint8_t> decompress(std::span<uint8_t> input);
 
 } // namespace legday
 
