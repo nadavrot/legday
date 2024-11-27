@@ -5,7 +5,7 @@
 #include <vector>
 
 int main(int argc, char *argv[]) {
-  if (argc < 4) {
+  if (argc < 5) {
     std::cerr << "Usage: " << argv[0]
               << " [compress|decompress|verify] [INT8|FP8|BF16|FP16|FP32] "
                  "<input> <output>\n";
@@ -53,8 +53,14 @@ int main(int argc, char *argv[]) {
                              std::istreambuf_iterator<char>());
 
   std::vector<uint8_t> output;
+  std::vector<uint8_t> input_copy;
 
   if (compress) {
+
+    if (verify) {
+      // Make a copy of the input for verification.
+      input_copy = bytes;
+    }
     output = legday::compress(bytes, layout);
     float percent = (100.0 * float(output.size()) / float(bytes.size()));
     std::cout << "Compressed " << bytes.size() << " to " << output.size()
@@ -62,7 +68,7 @@ int main(int argc, char *argv[]) {
 
     if (verify) {
       auto decompressed = legday::decompress(output);
-      if (decompressed != bytes) {
+      if (decompressed != input_copy) {
         std::cerr << "Error: verification failed\n";
         return 1;
       }
