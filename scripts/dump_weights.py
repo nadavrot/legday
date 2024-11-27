@@ -26,5 +26,5 @@ for tensor_name in model:
     # remove invalid characters from the tensor name
     make_safe_name(tensor_name)
     #save the contents of the tensor to a file
-    with open(sys.argv[1]+"."+tensor_name + ".bin", "wb") as f:
+    with open(sys.argv[1] + "." + tensor_name + "." + str(tensor.dtype) + ".bin", "wb") as f:
         f.write(bytes)
