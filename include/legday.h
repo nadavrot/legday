@@ -16,11 +16,6 @@ enum Layout {
   INT8,
 };
 
-constexpr uint8_t channels_for_layout[6] = {32, 32, 16, 16, 8, 8};
-
-/// Count the number of bits in a buffer.
-uint64_t popcnt(std::span<uint8_t> buffer);
-
 template <unsigned NumChannels> class Stream {
   std::span<uint8_t> buffer_;
   static_assert(NumChannels % 8 == 0, "NumChannels must be a multiple of 8");
