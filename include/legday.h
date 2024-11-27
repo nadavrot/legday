@@ -34,6 +34,7 @@ public:
     // Figure out which byte in the word.
     size_t byte_idx = channel / 8;
     uint8_t bit = (channel % 8);
+    buffer_[base + byte_idx] &= ~(0x1 << bit);
     buffer_[base + byte_idx] |= (value & 0x1) << bit;
   }
 
