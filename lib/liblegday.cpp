@@ -138,37 +138,31 @@ static void print_correlation_previous_bit(std::span<uint8_t> input) {
   printf("\n");
 }
 
-static void add_bias_to_second_byte(std::span<uint8_t> input, uint8_t bias,
-                                    bool undo) {
+static void transform_bf16_buffer(std::span<uint8_t> input, bool forward) {
+  return;
   // Xor the low exponent bit with the highest mantissa bit.
   for (size_t i = 0; i < input.size() / 2; i++) {
-    if (!undo) {
+    if (forward) {
       unsigned low_exp = ((input[i * 2 + 1] >> 1) & 0x1);
       input[i * 2] ^= low_exp << 7;
-      input[i * 2 + 1] += bias;
+      input[i * 2 + 1] += 127; // Bias the exponent.
     } else {
-      input[i * 2 + 1] -= bias;
+      input[i * 2 + 1] -= 127; // Un-bias the exponent.
       unsigned low_exp = ((input[i * 2 + 1] >> 1) & 0x1);
       input[i * 2] ^= low_exp << 7;
     }
   }
 }
 
-std::vector<uint8_t> legday::compress(std::span<uint8_t> input) {
-  constexpr uint8_t CHANNELS = 16;
+template <unsigned CHANNELS>
+void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
   assert(input.size() % CHANNELS == 0);
-  std::vector<uint8_t> output;
 
-  // FORMAT: Magic, Kind, num_channels, num_words.
-  push<uint32_t>(output, 'LGDY');
-  push<uint8_t>(output, Layout::BF16);
-  push<uint8_t>(output, CHANNELS);
-  push<uint32_t>(output, (input.size() * 8) / CHANNELS);
+  legday::push<uint8_t>(output, CHANNELS);
+  legday::push<uint32_t>(output, (input.size() * 8) / CHANNELS);
 
-  add_bias_to_second_byte(input, 127, false);
-
-  Stream<CHANNELS>::ArrayPopcntTy ones;
-  Stream<CHANNELS> stream(input);
+  typename legday::Stream<CHANNELS>::ArrayPopcntTy ones;
+  legday::Stream<CHANNELS> stream(input);
   stream.popcnt(ones);
 
   uint16_t prob[CHANNELS] = {0};
@@ -178,49 +172,57 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input) {
 
   // FORMAT: One uint16_t per channel, the probability of a bit being 1.
   for (int i = 0; i < CHANNELS; i++) {
-    push<uint16_t>(output, prob[i]);
+    legday::push<uint16_t>(output, prob[i]);
   }
 
-  // print the probabilities.
   for (int i = 0; i < CHANNELS; i++) {
-    printf("Channel %d: Prob :%d\n", i, prob[i]);
-  }
-
-  printf("Words: %d\n", stream.size());
-  unsigned prev = 0;
-  for (int i = 0; i < CHANNELS; i++) {
-    BitonicEncoder encoder(output);
+    legday::BitonicEncoder encoder(output);
 
     for (size_t j = 0; j < stream.size(); j++) {
       bool bit = stream.get(j, i);
       encoder.encode(bit, prob[i]);
     }
     encoder.finalize();
-    printf("Channel %d: %lu/%zu (%d - %f) - %lu\n", i, ones[i], stream.size(),
-           prob[i], prob[i] / 65535.0, output.size() - prev);
-    prev = output.size();
+  }
+}
+
+std::vector<uint8_t> legday::compress(std::span<uint8_t> input,
+                                      legday::Layout layout) {
+  std::vector<uint8_t> output;
+  legday::push<uint32_t>(output, 'LGDY');
+  legday::push<uint8_t>(output, layout);
+
+  switch (layout) {
+  case legday::Layout::BF16: {
+    transform_bf16_buffer(input, true);
+    compress_impl<16>(input, output);
+    transform_bf16_buffer(input, false); // Undo the transformation.
+
+    break;
+  }
+  case legday::Layout::FP16: {
+    compress_impl<16>(input, output);
+    break;
+  }
+  case legday::Layout::FP32: {
+    compress_impl<32>(input, output);
+    break;
+  }
+  case legday::Layout::FP8: {
+    compress_impl<8>(input, output);
+    break;
+  }
+  case legday::Layout::INT8: {
+    compress_impl<8>(input, output);
+    break;
+  }
   }
 
-  printf("Compressed %zu bytes to %zu bytes (ratio %03f)\n", input.size(),
-         output.size(), float(output.size()) / input.size());
-
-  add_bias_to_second_byte(input, 127, true); // Fix the input.
   return output;
 }
 
-std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
-  constexpr uint8_t CHANNELS = 16;
-
-  // FORMAT: Magic, Kind, num_channels, num_words.
-  uint32_t magic = legday::read<uint32_t>(input, 0);
-  uint8_t kind = legday::read<uint8_t>(input, 4);
-  uint8_t channels = legday::read<uint8_t>(input, 5);
-  uint32_t words = legday::read<uint32_t>(input, 6);
-  assert(magic == 'LGDY');
-  assert(kind == Layout::BF16);
-  assert(channels == CHANNELS);
-  input = input.subspan(10);
-
+template <unsigned CHANNELS>
+std::vector<uint8_t> decompress_impl(std::span<uint8_t> input, size_t words) {
   // Read the probability of each channel.
   uint16_t prob[CHANNELS] = {0};
   for (int i = 0; i < CHANNELS; i++) {
@@ -228,16 +230,11 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
     input = input.subspan(2);
   }
 
-  // print the probabilities.
-  for (int i = 0; i < CHANNELS; i++) {
-    printf("Channel %d: Prob :%d\n", i, prob[i]);
-  }
-
   std::vector<uint8_t> output(words * (CHANNELS / 8), 0);
-  Stream<CHANNELS> stream(output);
+  legday::Stream<CHANNELS> stream(output);
 
   for (int i = 0; i < CHANNELS; i++) {
-    BitonicDecoder decoder(input);
+    legday::BitonicDecoder decoder(input);
 
     for (size_t w = 0; w < words; w++) {
       auto bit = decoder.decode(prob[i]);
@@ -247,7 +244,33 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
     input = input.subspan(decoder.consumed());
   }
 
-  // Undo the transformation.
-  add_bias_to_second_byte(output, 127, true);
   return output;
+}
+
+std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
+  // FORMAT: Magic, Kind, num_channels, num_words.
+  uint32_t magic = legday::read<uint32_t>(input, 0);
+  uint8_t kind = legday::read<uint8_t>(input, 4);
+  uint8_t channels = legday::read<uint8_t>(input, 5);
+  uint32_t words = legday::read<uint32_t>(input, 6);
+  assert(magic == 'LGDY');
+  input = input.subspan(10);
+
+  switch (kind) {
+  case legday::Layout::BF16: {
+    std::vector<uint8_t> output = decompress_impl<16>(input, words);
+    transform_bf16_buffer(output, true);
+    return output;
+  }
+  case legday::Layout::FP16:
+    return decompress_impl<16>(input, words);
+  case legday::Layout::FP32:
+    return decompress_impl<32>(input, words);
+  case legday::Layout::FP8:
+    return decompress_impl<8>(input, words);
+  case legday::Layout::INT8:
+    return decompress_impl<8>(input, words);
+  default:
+    assert(false);
+  }
 }

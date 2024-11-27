@@ -9,7 +9,6 @@
 namespace legday {
 
 enum Layout {
-  UNKNOWN,
   FP32,
   FP16,
   BF16,
@@ -128,7 +127,7 @@ template <typename T> T read(std::span<uint8_t> input, size_t offset) {
   return value;
 }
 
-std::vector<uint8_t> compress(std::span<uint8_t> input);
+std::vector<uint8_t> compress(std::span<uint8_t> input, Layout layout);
 std::vector<uint8_t> decompress(std::span<uint8_t> input);
 
 } // namespace legday

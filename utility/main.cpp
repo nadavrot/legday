@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
   std::vector<uint8_t> output;
 
   if (compress) {
-    output = legday::compress(bytes);
+    output = legday::compress(bytes, legday::Layout::BF16);
     if (verify) {
       auto decompressed = legday::decompress(output);
       if (decompressed != bytes) {
