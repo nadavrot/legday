@@ -8,6 +8,10 @@ set(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall")
+
+
 # Add subdirectories for library and utility
 add_subdirectory(lib)
 add_subdirectory(utility)

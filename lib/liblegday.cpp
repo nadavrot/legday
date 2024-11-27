@@ -3,10 +3,6 @@
 #include <cassert>
 #include <stdio.h>
 
-static constexpr uint8_t nthbit(uint8_t byte, size_t n) {
-  return (byte >> n) & 1;
-}
-
 legday::BitonicEncoder::BitonicEncoder(std::vector<uint8_t> &output)
     : low_(0), high_(0xffffffff), output_(output) {}
 
@@ -92,52 +88,6 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   return bit;
 }
 
-static float get_correlation_between_bits(std::span<uint8_t> input, int i,
-                                          int j) {
-  legday::Stream<16> stream(input);
-  if (i < j) {
-    return 0;
-  }
-  uint32_t correlation = 0;
-  for (size_t k = 0; k < stream.size(); k++) {
-    correlation += stream.get(k, i) == stream.get(k, j);
-  }
-
-  return float(correlation) / float(stream.size());
-}
-
-static void print_correlation_matrix(std::span<uint8_t> input) {
-  for (int i = 0; i < 10; i++) {
-    for (int j = 0; j < 10; j++) {
-      printf("(%d, %d) %0.2f ", i, j,
-             get_correlation_between_bits(input, i, j));
-    }
-    printf("\n");
-  }
-}
-
-static float get_correlation_between_consecutive_bits(std::span<uint8_t> input,
-                                                      int i) {
-  bool prev = false;
-  legday::Stream<16> stream(input);
-
-  uint32_t correlation = 0;
-  for (size_t k = 0; k < stream.size(); k++) {
-    bool bit = stream.get(k, i);
-    correlation += prev == bit;
-    prev = bit;
-  }
-
-  return float(correlation) / float(stream.size());
-}
-
-static void print_correlation_previous_bit(std::span<uint8_t> input) {
-  for (int i = 0; i < 16; i++) {
-    printf("%0.2f ", get_correlation_between_consecutive_bits(input, i));
-  }
-  printf("\n");
-}
-
 void legday::transform_bf16_buffer(std::span<uint8_t> input, bool forward) {
   // Xor the low exponent bit with the highest mantissa bit.
   for (size_t i = 0; i < input.size() / 2; i++) {
@@ -156,8 +106,6 @@ void legday::transform_bf16_buffer(std::span<uint8_t> input, bool forward) {
 template <unsigned CHANNELS>
 void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
   assert(input.size() % CHANNELS == 0);
-
-  legday::push<uint8_t>(output, CHANNELS);
   legday::push<uint32_t>(output, (input.size() * 8) / CHANNELS);
 
   typename legday::Stream<CHANNELS>::ArrayPopcntTy ones;
@@ -249,10 +197,9 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
   // FORMAT: Magic, Kind, num_channels, num_words.
   uint32_t magic = legday::read<uint32_t>(input, 0);
   uint8_t kind = legday::read<uint8_t>(input, 4);
-  uint8_t channels = legday::read<uint8_t>(input, 5);
-  uint32_t words = legday::read<uint32_t>(input, 6);
+  uint32_t words = legday::read<uint32_t>(input, 5);
   assert(magic == 'LGDY');
-  input = input.subspan(10);
+  input = input.subspan(9);
 
   switch (kind) {
   case legday::Layout::BF16: {
