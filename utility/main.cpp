@@ -40,6 +40,10 @@ int main(int argc, char *argv[]) {
 
   if (compress) {
     output = legday::compress(bytes, legday::Layout::BF16);
+    std::cout << "Compressed " << bytes.size() << " bytes to " << output.size()
+              << " bytes ("
+              << (100.0 * float(output.size()) / float(bytes.size())) << "%)\n";
+
     if (verify) {
       auto decompressed = legday::decompress(output);
       if (decompressed != bytes) {

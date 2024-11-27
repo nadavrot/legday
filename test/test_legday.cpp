@@ -61,6 +61,17 @@ TEST(LegdayTest, TestStream1) {
   EXPECT_EQ(ones2[9], 0);
 }
 
+TEST(LegdayTest, BF16Transform0) {
+  // A buffer with random values
+  uint8_t buffer[16] = {0x3c, 0x4b, 0xbc, 0x60, 0xbc, 0x94, 0xba, 0xaf,
+                        0xbd, 0x17, 0xbc, 0x5c, 0xbc, 0x90, 0x3c, 0xa6};
+
+  std::vector<uint8_t> transformed(buffer, buffer + 16);
+  transform_bf16_buffer(transformed, true);
+  transform_bf16_buffer(transformed, false);
+  EXPECT_EQ(memcmp(buffer, transformed.data(), 16), 0);
+}
+
 TEST(LegdayTest, BasicEncoders0) {
   std::vector<uint8_t> buffer;
   BitonicEncoder encoder(buffer);

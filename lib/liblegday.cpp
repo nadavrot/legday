@@ -138,8 +138,7 @@ static void print_correlation_previous_bit(std::span<uint8_t> input) {
   printf("\n");
 }
 
-static void transform_bf16_buffer(std::span<uint8_t> input, bool forward) {
-  return;
+void legday::transform_bf16_buffer(std::span<uint8_t> input, bool forward) {
   // Xor the low exponent bit with the highest mantissa bit.
   for (size_t i = 0; i < input.size() / 2; i++) {
     if (forward) {
@@ -197,7 +196,6 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input,
     transform_bf16_buffer(input, true);
     compress_impl<16>(input, output);
     transform_bf16_buffer(input, false); // Undo the transformation.
-
     break;
   }
   case legday::Layout::FP16: {
@@ -259,7 +257,7 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
   switch (kind) {
   case legday::Layout::BF16: {
     std::vector<uint8_t> output = decompress_impl<16>(input, words);
-    transform_bf16_buffer(output, true);
+    transform_bf16_buffer(output, false);
     return output;
   }
   case legday::Layout::FP16:
