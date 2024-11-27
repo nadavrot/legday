@@ -107,16 +107,10 @@ void legday::transform_f32_buffer(std::span<uint8_t> input, bool forward) {
 
   legday::Stream<32> stream(input);
   for (size_t i = 0; i < stream.size(); i++) {
-    bool b21 = stream.get(i, 21);
-    bool b22 = stream.get(i, 22);
-    bool b23 = stream.get(i, 23);
     bool b24 = stream.get(i, 24);
     bool b25 = stream.get(i, 25);
     bool b26 = stream.get(i, 26);
     bool b27 = stream.get(i, 27);
-    stream.set(i, 21, b27 ^ b21);
-    stream.set(i, 22, b27 ^ b22);
-    stream.set(i, 23, b27 ^ b23);
     stream.set(i, 24, b27 ^ b24);
     stream.set(i, 25, b27 ^ b25);
     stream.set(i, 26, b27 ^ b26);
