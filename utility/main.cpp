@@ -7,7 +7,8 @@
 int main(int argc, char *argv[]) {
   if (argc < 4) {
     std::cerr << "Usage: " << argv[0]
-              << " [compress|decompress|verify] <input> <output>\n";
+              << " [compress|decompress|verify] [INT8|FP8|BF16|FP16|FP32] "
+                 "<input> <output>\n";
     return 1;
   }
 
@@ -25,10 +26,25 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  std::ifstream input_file(argv[2], std::ios::binary);
+  legday::Layout layout;
+#define CASE(x)                                                                \
+  if (std::string(argv[2]) == #x) {                                            \
+    layout = legday::Layout::x;                                                \
+  } else
+  CASE(BF16)
+  CASE(FP16)
+  CASE(FP32)
+  CASE(FP8)
+  CASE(INT8) {
+    std::cerr << "Error: unknown layout '" << argv[2] << "'\n";
+    return 1;
+  }
+#undef CASE
+
+  std::ifstream input_file(argv[3], std::ios::binary);
 
   if (!input_file) {
-    std::cerr << "Error: could not open file '" << argv[2] << "'\n";
+    std::cerr << "Error: could not open file '" << argv[3] << "'\n";
     return 1;
   }
 
@@ -39,10 +55,10 @@ int main(int argc, char *argv[]) {
   std::vector<uint8_t> output;
 
   if (compress) {
-    output = legday::compress(bytes, legday::Layout::BF16);
-    std::cout << "Compressed " << bytes.size() << " bytes to " << output.size()
-              << " bytes ("
-              << (100.0 * float(output.size()) / float(bytes.size())) << "%)\n";
+    output = legday::compress(bytes, layout);
+    float percent = (100.0 * float(output.size()) / float(bytes.size()));
+    std::cout << "Compressed " << bytes.size() << " to " << output.size()
+              << " bytes (" << percent << "%)\n";
 
     if (verify) {
       auto decompressed = legday::decompress(output);
@@ -56,9 +72,9 @@ int main(int argc, char *argv[]) {
   } else {
     output = legday::decompress(bytes);
   }
-  std::ofstream output_file(argv[3], std::ios::binary);
+  std::ofstream output_file(argv[4], std::ios::binary);
   if (!output_file) {
-    std::cerr << "Error: could not open file '" << argv[3] << "'\n";
+    std::cerr << "Error: could not open file '" << argv[4] << "'\n";
     return 1;
   }
   output_file.write(reinterpret_cast<char *>(output.data()), output.size());

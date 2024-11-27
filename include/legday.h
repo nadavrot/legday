@@ -9,11 +9,11 @@
 namespace legday {
 
 enum Layout {
-  FP32,
+  INT8,
+  FP8,
   FP16,
   BF16,
-  FP8,
-  INT8,
+  FP32,
 };
 
 template <unsigned NumChannels> class Stream {
