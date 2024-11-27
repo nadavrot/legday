@@ -123,6 +123,7 @@ template <typename T> T read(std::span<uint8_t> input, size_t offset) {
 }
 
 void transform_bf16_buffer(std::span<uint8_t> input, bool forward);
+void transform_f32_buffer(std::span<uint8_t> input, bool forward);
 std::vector<uint8_t> compress(std::span<uint8_t> input, Layout layout);
 std::vector<uint8_t> decompress(std::span<uint8_t> input);
 
