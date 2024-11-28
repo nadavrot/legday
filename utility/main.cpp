@@ -7,7 +7,7 @@
 int main(int argc, char *argv[]) {
   if (argc < 5) {
     std::cerr << "Usage: " << argv[0]
-              << " [compress|decompress|verify] [INT8|FP8|BF16|FP16|FP32] "
+              << " [compress|decompress|verify] [INT8|BF16|FP32] "
                  "<input> <output>\n";
     return 1;
   }
@@ -31,11 +31,10 @@ int main(int argc, char *argv[]) {
   if (std::string(argv[2]) == #x) {                                            \
     layout = legday::Layout::x;                                                \
   } else
+  CASE(INT8)
   CASE(BF16)
-  CASE(FP16)
   CASE(FP32)
-  CASE(FP8)
-  CASE(INT8) {
+  {
     std::cerr << "Error: unknown layout '" << argv[2] << "'\n";
     return 1;
   }

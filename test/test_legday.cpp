@@ -1,5 +1,4 @@
-
-#include "legday.h"
+#include "legday_impl.h"
 #include <gtest/gtest.h>
 
 using namespace legday;

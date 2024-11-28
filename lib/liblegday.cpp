@@ -1,4 +1,5 @@
 #include "legday.h"
+#include "legday_impl.h"
 
 #include <cassert>
 #include <stdio.h>
@@ -168,22 +169,12 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input,
     transform_buffer_offset(input, 2, 1, -tr_param);
     break;
   }
-  case legday::Layout::FP16: {
-    legday::push<uint8_t>(output, 0);
-    compress_impl<16>(input, output);
-    break;
-  }
   case legday::Layout::FP32: {
     uint8_t tr_param = pick_best_transform_parameter<16>(input, 2, 1);
     legday::push<uint8_t>(output, tr_param);
     transform_buffer_offset(input, 4, 3, tr_param);
     compress_impl<32>(input, output);
     transform_buffer_offset(input, 4, 3, -tr_param);
-    break;
-  }
-  case legday::Layout::FP8: {
-    legday::push<uint8_t>(output, 0);
-    compress_impl<8>(input, output);
     break;
   }
   case legday::Layout::INT8: {
@@ -237,17 +228,11 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
     transform_buffer_offset(output, 2, 1, -tr_param);
     return output;
   }
-  case legday::Layout::FP16: {
-    std::vector<uint8_t> output = decompress_impl<16>(input, words);
-    return output;
-  }
   case legday::Layout::FP32: {
     std::vector<uint8_t> output = decompress_impl<32>(input, words);
     transform_buffer_offset(output, 4, 3, -tr_param);
     return output;
   }
-  case legday::Layout::FP8:
-    return decompress_impl<8>(input, words);
   case legday::Layout::INT8:
     return decompress_impl<8>(input, words);
   default:
