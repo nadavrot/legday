@@ -44,8 +44,7 @@ legday::BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
   cursor_ = 0;
   state_ = 0;
   for (int i = 0; i < 4; i++) {
-    state_ = (state_ << 8) | uint32_t(input[cursor_]);
-    cursor_++;
+    state_ = (state_ << 8) | uint32_t(input[cursor_++]);
   }
   low_ = 0;
   high_ = 0xffffffff;
@@ -53,8 +52,7 @@ legday::BitonicDecoder::BitonicDecoder(std::span<uint8_t> input) {
 }
 
 std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
-  assert(high_ > low_);
-  assert(high_ >= state_ && low_ <= state_);
+  assert(high_ > low_ && high_ >= state_ && low_ <= state_);
   assert(cursor_ <= input_.size());
 
   // Figure out the mid point of the range, depending on the probability.
@@ -63,8 +61,7 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   uint32_t mid = low_ + uint32_t(scale);
   assert(high_ > mid && mid >= low_);
 
-  // Figure out which bit we extract based on where the state falls in the
-  // range.
+  // Compute the next bit based on where the state falls in the range.
   bool bit = state_ <= mid;
 
   // Select the sub-range based on the bit.
@@ -91,8 +88,7 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
 
 void legday::transform_buffer_offset(std::span<uint8_t> input, uint8_t stride,
                                      uint8_t offset, uint8_t value) {
-  assert(input.size() % stride == 0);
-  assert(offset < stride);
+  assert((input.size() % stride == 0) && offset < stride);
   for (size_t i = 0; i < input.size(); i += stride) {
     input[i + offset] += value;
   }
@@ -107,13 +103,10 @@ void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
   legday::Stream<CHANNELS> stream(input);
   stream.popcnt(ones);
 
+  // FORMAT: One uint16_t per channel, the probability of a bit being 1.
   uint16_t prob[CHANNELS] = {0};
   for (int i = 0; i < CHANNELS; i++) {
     prob[i] = uint16_t((ones[i] * 65535) / stream.size());
-  }
-
-  // FORMAT: One uint16_t per channel, the probability of a bit being 1.
-  for (int i = 0; i < CHANNELS; i++) {
     legday::push<uint16_t>(output, prob[i]);
   }
 
@@ -131,7 +124,7 @@ void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
 template <unsigned CHANNELS>
 static uint8_t pick_best_transform_parameter(std::span<uint8_t> input,
                                              uint8_t stride, uint8_t offset) {
-  constexpr int test_buffer_size = 1<<16;
+  constexpr int test_buffer_size = 1 << 16;
   std::span<uint8_t> small = input;
   if (small.size() > test_buffer_size) {
     small = small.first(test_buffer_size);
@@ -157,7 +150,7 @@ static uint8_t pick_best_transform_parameter(std::span<uint8_t> input,
 std::vector<uint8_t> legday::compress(std::span<uint8_t> input,
                                       legday::Layout layout) {
   std::vector<uint8_t> output;
-  legday::push<uint32_t>(output, 'LGDY');
+  legday::push<uint32_t>(output, 0x474c5944);
   legday::push<uint8_t>(output, layout);
 
   switch (layout) {
@@ -219,7 +212,7 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
   uint8_t kind = legday::read<uint8_t>(input, 4);
   uint8_t tr_param = legday::read<uint8_t>(input, 5);
   uint32_t words = legday::read<uint32_t>(input, 6);
-  assert(magic == 'LGDY');
+  assert(magic == 0x474c5944);
   input = input.subspan(10);
 
   switch (kind) {

@@ -47,12 +47,11 @@ public:
 
   /// Fill the array 'ones' with the number of bits in each channel.
   void popcnt(ArrayPopcntTy &ones) {
-    size_t num_channels_bytes = NumChannels / 8;
+    size_t elem_bytes = NumChannels / 8;
     for (int i = 0; i < NumChannels; i++) {
       ones[i] = 0;
     }
-    for (size_t offset = 0; offset < buffer_.size() / num_channels_bytes;
-         offset++) {
+    for (size_t offset = 0; offset < buffer_.size() / elem_bytes; offset++) {
       for (int channel = 0; channel < NumChannels; channel++) {
         ones[channel] += get(offset, channel);
       }
