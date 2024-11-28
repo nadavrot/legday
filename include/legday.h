@@ -123,8 +123,10 @@ template <typename T> T read(std::span<uint8_t> input, size_t offset) {
   return value;
 }
 
-void transform_bf16_buffer(std::span<uint8_t> input, bool forward);
-void transform_f32_buffer(std::span<uint8_t> input, bool forward);
+/// For each group of 'stride' bytes, increment the 'offset'-th byte by 'value'.
+void transform_buffer_offset(std::span<uint8_t> input, uint8_t stride,
+                             uint8_t offset, uint8_t value);
+
 std::vector<uint8_t> compress(std::span<uint8_t> input, Layout layout);
 std::vector<uint8_t> decompress(std::span<uint8_t> input);
 
