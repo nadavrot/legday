@@ -60,7 +60,23 @@ TEST(LegdayTest, TestStream1) {
   EXPECT_EQ(ones2[9], 0);
 }
 
-TEST(LegdayTest, BF16Transform0) {}
+TEST(LegdayTest, BF16Transform0) {
+  {
+  uint8_t buffer[2] = {0x80, 0x01};
+  rotate_b16(buffer, 1);
+  EXPECT_EQ(buffer[0], 0xc0);
+  EXPECT_EQ(buffer[1], 0x00);
+  rotate_b16(buffer, 15);
+  EXPECT_EQ(buffer[0], 0x80);
+  EXPECT_EQ(buffer[1], 0x01);
+  }
+  {
+    uint16_t buffer[1] = {0x80};
+    std::span<uint8_t> span((uint8_t*)buffer, 2);
+    rotate_b16(span, 1);
+    EXPECT_EQ(buffer[0], 0x40);
+  }
+}
 
 TEST(LegdayTest, F32Transform0) {
   {

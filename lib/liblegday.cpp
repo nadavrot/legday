@@ -4,6 +4,8 @@
 #include <cassert>
 #include <stdio.h>
 
+using namespace legday;
+
 legday::BitonicEncoder::BitonicEncoder(std::vector<uint8_t> &output)
     : low_(0), high_(0xffffffff), output_(output) {}
 
@@ -94,24 +96,34 @@ void legday::transform_buffer_offset(std::span<uint8_t> input, uint8_t stride,
   }
 }
 
+void legday::rotate_b16(std::span<uint8_t> input, uint8_t n) {
+  assert(input.size() % 2 == 0);
+  for (size_t i = 0; i < input.size(); i += 2) {
+    uint16_t value = uint16_t(input[i + 1]) | (uint16_t(input[i]) << 8);
+    value = (value >> n) | (value << (16 - n));
+    input[i] = uint8_t(value >> 8);
+    input[i + 1] = uint8_t(value);
+  }
+}
+
 template <unsigned CHANNELS>
 void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
-  assert(input.size() % CHANNELS == 0);
-  legday::push<uint32_t>(output, (input.size() * 8) / CHANNELS);
+  assert((input.size() * 8) % CHANNELS == 0);
+  push<uint32_t>(output, (input.size() * 8) / CHANNELS); // Number of words
 
-  typename legday::Stream<CHANNELS>::ArrayPopcntTy ones;
-  legday::Stream<CHANNELS> stream(input);
+  typename Stream<CHANNELS>::ArrayPopcntTy ones;
+  Stream<CHANNELS> stream(input);
   stream.popcnt(ones);
 
-  // FORMAT: One uint16_t per channel, the probability of a bit being 1.
+  // Save uint16_t per channel (the probability of a bit being 1).
   uint16_t prob[CHANNELS] = {0};
   for (int i = 0; i < CHANNELS; i++) {
     prob[i] = uint16_t((ones[i] * 65535) / stream.size());
-    legday::push<uint16_t>(output, prob[i]);
+    push<uint16_t>(output, prob[i]);
   }
 
   for (int i = 0; i < CHANNELS; i++) {
-    legday::BitonicEncoder encoder(output);
+    BitonicEncoder encoder(output);
 
     for (size_t j = 0; j < stream.size(); j++) {
       bool bit = stream.get(j, i);
@@ -124,20 +136,16 @@ void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
 template <unsigned CHANNELS>
 static uint8_t pick_best_transform_parameter(std::span<uint8_t> input,
                                              uint8_t stride, uint8_t offset) {
-  constexpr int test_buffer_size = 1 << 16;
-  std::span<uint8_t> small = input;
-  if (small.size() > test_buffer_size) {
-    small = small.first(test_buffer_size);
-  }
+  size_t test_buffer_size = std::min<size_t>(input.size(), 1 << 16);
 
+  std::vector<uint8_t> copy;
   std::vector<uint8_t> output;
   uint32_t best = 0xffffffff;
   uint8_t best_param = 0;
   for (int i = 0; i < 255; i++) {
-    legday::transform_buffer_offset(small, stride, offset, i);
-    compress_impl<16>(small, output);
-    legday::transform_buffer_offset(small, stride, offset, -i);
-
+    copy.assign(input.begin(), input.begin() + test_buffer_size);
+    transform_buffer_offset(copy, stride, offset, i);
+    compress_impl<16>(copy, output);
     if (output.size() < best) {
       best = output.size();
       best_param = i;
@@ -147,31 +155,31 @@ static uint8_t pick_best_transform_parameter(std::span<uint8_t> input,
   return best_param;
 }
 
-std::vector<uint8_t> legday::compress(std::span<uint8_t> input,
-                                      legday::Layout layout) {
+std::vector<uint8_t> legday::compress(std::span<uint8_t> input, Layout layout) {
   std::vector<uint8_t> output;
-  legday::push<uint32_t>(output, 0x474c5944);
-  legday::push<uint8_t>(output, layout);
+  push<uint32_t>(output, 0x474c5944); // Magic
+  push<uint8_t>(output, layout);      // Kind
 
   switch (layout) {
-  case legday::Layout::BF16: {
+  case Layout::BF16: {
+    rotate_b16(input, 15);
     uint8_t tr_param = pick_best_transform_parameter<16>(input, 2, 1);
-    legday::push<uint8_t>(output, tr_param);
+    push<uint8_t>(output, tr_param); // Transform parameter
     transform_buffer_offset(input, 2, 1, tr_param);
     compress_impl<16>(input, output);
-    transform_buffer_offset(input, 2, 1, -tr_param);
     break;
   }
-  case legday::Layout::FP32: {
+  case Layout::FP32: {
+    rotate_b16(input, 15);
     uint8_t tr_param = pick_best_transform_parameter<16>(input, 2, 1);
-    legday::push<uint8_t>(output, tr_param);
+    push<uint8_t>(output, tr_param); // Transform parameter
     transform_buffer_offset(input, 4, 3, tr_param);
+
     compress_impl<32>(input, output);
-    transform_buffer_offset(input, 4, 3, -tr_param);
     break;
   }
-  case legday::Layout::INT8: {
-    legday::push<uint8_t>(output, 0);
+  case Layout::INT8: {
+    push<uint8_t>(output, 0); // Transform parameter
     compress_impl<8>(input, output);
     break;
   }
@@ -182,18 +190,17 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input,
 
 template <unsigned CHANNELS>
 std::vector<uint8_t> decompress_impl(std::span<uint8_t> input, size_t words) {
-  // Read the probability of each channel.
   uint16_t prob[CHANNELS] = {0};
   for (int i = 0; i < CHANNELS; i++) {
-    prob[i] = legday::read<uint16_t>(input, 0);
+    prob[i] = read<uint16_t>(input, 0);
     input = input.subspan(2);
   }
 
   std::vector<uint8_t> output(words * (CHANNELS / 8), 0);
-  legday::Stream<CHANNELS> stream(output);
+  Stream<CHANNELS> stream(output);
 
   for (int i = 0; i < CHANNELS; i++) {
-    legday::BitonicDecoder decoder(input);
+    BitonicDecoder decoder(input);
 
     for (size_t w = 0; w < words; w++) {
       auto bit = decoder.decode(prob[i]);
@@ -207,26 +214,27 @@ std::vector<uint8_t> decompress_impl(std::span<uint8_t> input, size_t words) {
 }
 
 std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
-  // FORMAT: Magic, Kind, num_channels, num_words.
-  uint32_t magic = legday::read<uint32_t>(input, 0);
-  uint8_t kind = legday::read<uint8_t>(input, 4);
-  uint8_t tr_param = legday::read<uint8_t>(input, 5);
-  uint32_t words = legday::read<uint32_t>(input, 6);
+  uint32_t magic = read<uint32_t>(input, 0);  // Magic
+  uint8_t kind = read<uint8_t>(input, 4);     // Kind
+  uint8_t tr_param = read<uint8_t>(input, 5); // Transform parameter
+  uint32_t words = read<uint32_t>(input, 6);  // Number of words
   assert(magic == 0x474c5944);
   input = input.subspan(10);
 
   switch (kind) {
-  case legday::Layout::BF16: {
+  case Layout::BF16: {
     std::vector<uint8_t> output = decompress_impl<16>(input, words);
     transform_buffer_offset(output, 2, 1, -tr_param);
+    rotate_b16(output, 1);
     return output;
   }
-  case legday::Layout::FP32: {
+  case Layout::FP32: {
     std::vector<uint8_t> output = decompress_impl<32>(input, words);
     transform_buffer_offset(output, 4, 3, -tr_param);
+    rotate_b16(output, 1);
     return output;
   }
-  case legday::Layout::INT8:
+  case Layout::INT8:
     return decompress_impl<8>(input, words);
   default:
     assert(false);
