@@ -145,7 +145,7 @@ static uint8_t pick_best_transform_parameter(std::span<uint8_t> input,
   for (int i = 0; i < 255; i++) {
     copy.assign(input.begin(), input.begin() + test_buffer_size);
     transform_buffer_offset(copy, stride, offset, i);
-    compress_impl<16>(copy, output);
+    compress_impl<CHANNELS>(copy, output);
     if (output.size() < best) {
       best = output.size();
       best_param = i;
@@ -171,7 +171,7 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input, Layout layout) {
   }
   case Layout::FP32: {
     rotate_b16(input, 15);
-    uint8_t tr_param = pick_best_transform_parameter<16>(input, 2, 1);
+    uint8_t tr_param = pick_best_transform_parameter<32>(input, 4, 3);
     push<uint8_t>(output, tr_param); // Transform parameter
     transform_buffer_offset(input, 4, 3, tr_param);
 
