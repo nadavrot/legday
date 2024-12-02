@@ -78,29 +78,6 @@ TEST(LegdayTest, BF16Transform0) {
   }
 }
 
-TEST(LegdayTest, F32Transform0) {
-  {
-    // A buffer with random values
-    uint8_t buffer[16] = {0x3c, 0x4b, 0xbc, 0x60, 0xbc, 0x94, 0xba, 0xaf,
-                          0xbd, 0x17, 0xbc, 0x5c, 0xbc, 0x90, 0x3c, 0xa6};
-
-    std::vector<uint8_t> transformed(buffer, buffer + 16);
-    transform_buffer_offset(transformed, 4, 3, 7);
-    transform_buffer_offset(transformed, 4, 3, -7);
-    EXPECT_EQ(memcmp(buffer, transformed.data(), 16), 0);
-  }
-  {
-    // A buffer with random values
-    uint8_t buffer[16] = {0x3c, 0x4b, 0xbc, 0x60, 0xbc, 0x94, 0xba, 0xaf,
-                          0xbd, 0x17, 0xbc, 0x5c, 0xbc, 0x90, 0x3c, 0xa6};
-
-    std::vector<uint8_t> transformed(buffer, buffer + 16);
-    transform_buffer_offset(transformed, 4, 2, 17);
-    transform_buffer_offset(transformed, 4, 2, -17);
-    EXPECT_EQ(memcmp(buffer, transformed.data(), 16), 0);
-  }
-}
-
 TEST(LegdayTest, BasicEncoders0) {
   std::vector<uint8_t> buffer;
   BitonicEncoder encoder(buffer);

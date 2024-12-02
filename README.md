@@ -85,30 +85,22 @@ range 0..2? Now the array will be filled with numbers that look like 0x0000,
 0x0001, and 0x0002, and high bits would be constant zero. 
 By adding an offset of 1, we change the distribution of many bits!
 
-We can detect this pattern by measuring the correlation between the bits.
-If two bits agree a lot more than random, then we know that we have a pattern
-to exploit.
+We transform the floating point number in a few steps before we encode each bit
+independently.  The first step is to move all of the exponent bits into one
+byte. We simply rotate the float and push the sign bit to the back. This works
+for BF16 and FP32.
 
+Next, we transform the values to make the distribution of values sharper.  Each
+ML weight has a different distribution of numbers, so the transformation has to
+be dynamic.  Legday reduces the variance in the distribution of bits by sorting
+the exponent values according to their probability. By placing the most frequent
+values next to one another we reduce the Hamming distance.
 
-We compress our floating-point numbers by adding a bias to the exponent.
-The first step is to move all of the exponent bits into one byte. We simply
-rotate the float and push the sign bit to the back. This works for BF16 and FP32.
-Next, we add the bias, which is a small positive number.
+![Correlation between bits](docs/corr.svg)
 
-The problem is that each ML weight has a different distribution of numbers.
-We need to find the best offset for each weight.  Legday does this by
-enumerating the values that reduce correlation between bits. Legday picks a
-small portion of the weight and tries different offsets.
-
-
-![Correlation between bits](docs/corr.svg) 
-
-This picture shows the correlation after applying the offset. The low bits are
-close to 50%, and most of the high-bits are close to 100% or 0%. 
-The top 6 bits are almost constant, which means that they compress to almost
-zero bytes.  The five and-a-half bits that are almost constant result in a
-compression rate of `1-(5.5/16) = ~65%`. This is the compression ratio
-in some of the benchmarks. 
+This picture shows the difference between the expected correlation and the 
+measured correlation after applying the transformation. As expected, the 
+correlation between bits is reduced. 
 
 One of the cool things about this compression method is that it's easy to
 see how each bit channel is compressed. The table below shows the bit

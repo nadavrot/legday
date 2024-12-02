@@ -1,6 +1,7 @@
 #include "legday.h"
 #include "legday_impl.h"
 
+#include <algorithm>
 #include <cassert>
 #include <stdio.h>
 
@@ -88,14 +89,6 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   return bit;
 }
 
-void legday::transform_buffer_offset(std::span<uint8_t> input, uint8_t stride,
-                                     uint8_t offset, uint8_t value) {
-  assert((input.size() % stride == 0) && offset < stride);
-  for (size_t i = 0; i < input.size(); i += stride) {
-    input[i + offset] += value;
-  }
-}
-
 void legday::rotate_b16(std::span<uint8_t> input, uint8_t n) {
   assert(input.size() % 2 == 0);
   for (size_t i = 0; i < input.size(); i += 2) {
@@ -109,7 +102,6 @@ void legday::rotate_b16(std::span<uint8_t> input, uint8_t n) {
 template <unsigned CHANNELS>
 void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
   assert((input.size() * 8) % CHANNELS == 0);
-  push<uint32_t>(output, (input.size() * 8) / CHANNELS); // Number of words
 
   typename Stream<CHANNELS>::ArrayPopcntTy ones;
   Stream<CHANNELS> stream(input);
@@ -133,53 +125,62 @@ void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
   }
 }
 
-template <unsigned CHANNELS>
-static uint8_t pick_best_transform_parameter(std::span<uint8_t> input,
-                                             uint8_t stride, uint8_t offset) {
-  size_t test_buffer_size = std::min<size_t>(input.size(), 1 << 16);
-
-  std::vector<uint8_t> copy;
-  std::vector<uint8_t> output;
-  uint32_t best = 0xffffffff;
-  uint8_t best_param = 0;
-  for (int i = 0; i < 255; i++) {
-    copy.assign(input.begin(), input.begin() + test_buffer_size);
-    transform_buffer_offset(copy, stride, offset, i);
-    compress_impl<CHANNELS>(copy, output);
-    if (output.size() < best) {
-      best = output.size();
-      best_param = i;
-    }
-    output.clear();
+static void decode_symbols(std::span<uint8_t> input, std::span<uint8_t> decoder,
+                           uint8_t stride, uint8_t offset) {
+  for (int i = 0; i < input.size(); i += stride) {
+    input[i + offset] = decoder[input[i + offset]];
   }
-  return best_param;
+}
+
+static void sort_symbols(std::span<uint8_t> input, std::span<uint8_t> decoder,
+                         uint8_t stride, uint8_t offset) {
+  assert(decoder.size() == 256);
+  uint32_t hist[256] = {0};
+  uint8_t lut[256] = {0};
+
+  for (int i = 0; i < input.size(); i += stride) {
+    hist[input[i + offset]] += 1;
+  }
+
+  for (int i = 0; i < 256; i++) {
+    decoder[i] = i;
+  }
+  std::sort(decoder.begin(), decoder.end(),
+            [&hist](uint8_t a, uint8_t b) { return hist[a] > hist[b]; });
+
+  for (int i = 0; i < 256; i++) {
+    lut[decoder[i]] = i;
+  }
+
+  for (int i = 0; i < input.size(); i += stride) {
+    input[i + offset] = lut[input[i + offset]];
+  }
 }
 
 std::vector<uint8_t> legday::compress(std::span<uint8_t> input, Layout layout) {
+   uint8_t decoder[256];
   std::vector<uint8_t> output;
   push<uint32_t>(output, 0x474c5944); // Magic
   push<uint8_t>(output, layout);      // Kind
-
   switch (layout) {
   case Layout::BF16: {
+    push<uint32_t>(output, input.size()/2); // Words
     rotate_b16(input, 15);
-    uint8_t tr_param = pick_best_transform_parameter<16>(input, 2, 1);
-    push<uint8_t>(output, tr_param); // Transform parameter
-    transform_buffer_offset(input, 2, 1, tr_param);
+    sort_symbols(input, decoder, 2, 1);
+    output.insert(output.end(), decoder, decoder + 256);
     compress_impl<16>(input, output);
     break;
   }
   case Layout::FP32: {
-    rotate_b16(input, 15);
-    uint8_t tr_param = pick_best_transform_parameter<32>(input, 4, 3);
-    push<uint8_t>(output, tr_param); // Transform parameter
-    transform_buffer_offset(input, 4, 3, tr_param);
-
+    push<uint32_t>(output, input.size()/4); // Words
+    rotate_b16(input, 15);   
+    sort_symbols(input, decoder, 4, 3);
+    output.insert(output.end(), decoder, decoder + 256);
     compress_impl<32>(input, output);
     break;
   }
   case Layout::INT8: {
-    push<uint8_t>(output, 0); // Transform parameter
+    push<uint32_t>(output, input.size()); // Words
     compress_impl<8>(input, output);
     break;
   }
@@ -216,21 +217,24 @@ std::vector<uint8_t> decompress_impl(std::span<uint8_t> input, size_t words) {
 std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
   uint32_t magic = read<uint32_t>(input, 0);  // Magic
   uint8_t kind = read<uint8_t>(input, 4);     // Kind
-  uint8_t tr_param = read<uint8_t>(input, 5); // Transform parameter
-  uint32_t words = read<uint32_t>(input, 6);  // Number of words
+  uint32_t words = read<uint32_t>(input, 5);  // Number of words
   assert(magic == 0x474c5944);
-  input = input.subspan(10);
+  input = input.subspan(9);
 
   switch (kind) {
   case Layout::BF16: {
+    std::span<uint8_t> decoder(input.data(), 256);
+    input = input.subspan(256);
     std::vector<uint8_t> output = decompress_impl<16>(input, words);
-    transform_buffer_offset(output, 2, 1, -tr_param);
+    decode_symbols(output, decoder, 2, 1);
     rotate_b16(output, 1);
     return output;
   }
   case Layout::FP32: {
+    std::span<uint8_t> decoder(input.data(), 256);
+    input = input.subspan(256);
     std::vector<uint8_t> output = decompress_impl<32>(input, words);
-    transform_buffer_offset(output, 4, 3, -tr_param);
+    decode_symbols(output, decoder, 4, 3);
     rotate_b16(output, 1);
     return output;
   }

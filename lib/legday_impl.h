@@ -115,10 +115,6 @@ template <typename T> T read(std::span<uint8_t> input, size_t offset) {
   return value;
 }
 
-/// For each group of 'stride' bytes, increment the 'offset'-th byte by 'value'.
-void transform_buffer_offset(std::span<uint8_t> input, uint8_t stride,
-                             uint8_t offset, uint8_t value);
-
 /// Rotate right each group of uint16_t by n bits.
 void rotate_b16(std::span<uint8_t> input, uint8_t n);
 
