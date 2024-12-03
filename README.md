@@ -13,9 +13,13 @@ To get the best compression ratio, you need to compress weights one by one.
 This compressor operates on each tensor individually in two phases.
 First, a preprocessing step that transforms the tensor into a format that
 is more amenable to compression. Second, a compression step that uses an
-arithmetic coder to compress the tensor. 
+arithmetic coder to compress the tensor.
 
-Legday compresses llama weights to around 68%, while gzip compresses it to 79%.
+This benchmark shows the compression ratios for a few models from HuggingFace
+The weights are encoded in Float32 or BF16. The figures represent the size
+compared to the original model, and lower is better.
+
+![General Benchmark](docs/bench.svg) 
 
 # Command-line utility
 
@@ -115,18 +119,11 @@ is consistent with our projection.
 
 # Benchmark
 
-Here’s a benchmark of all weights over 1k from LLaMA2-7B, sorted by how well
+Here’s a comparison of all weights over 1k from LLaMA2-7B, sorted by how well
 they compress. The weights are encoded in BF16. The model is from HuggingFace.
 
 ![LLaMA2 benchmark](docs/llama2.svg) 
 
-This benchmark shows the compression ratios for various weights from several 
-well known models. The weights are encoded in Float32 and BF16. Notice that some
-of the Float32 models have zeros in the lower bits of the mantissa and this is
-why they compress better than the BF16 models. 
-All of the models are from HuggingFace.
-
-![General Benchmark](docs/bench.svg) 
 
 # Summary
 
