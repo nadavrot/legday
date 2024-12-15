@@ -1,3 +1,4 @@
+#include "legday.h"
 #include "legday_impl.h"
 #include <gtest/gtest.h>
 
@@ -34,45 +35,44 @@ TEST(LegdayTest, TestStream0) {
   EXPECT_EQ(stream2.get(1, 2), 1);
 }
 
-TEST(LegdayTest, TestStream1) {
-  uint8_t buffer[4] = {
-      1,
-      0,
-      3,
-      1,
-  };
-  Stream<8> stream(buffer);
+TEST(LegdayTest, TestStreamSlice0) {
+  uint8_t buffer[8] = {0x34, 0xff, 0xaa, 0x77};
+  Stream<16> stream(buffer);
 
-  Stream<8>::ArrayPopcntTy ones;
-  stream.popcnt(ones);
-  EXPECT_EQ(ones[0], 3);
-  EXPECT_EQ(ones[1], 1);
-  EXPECT_EQ(ones[2], 0);
-  EXPECT_EQ(ones[3], 0);
-
-  Stream<16> stream2(buffer);
-
-  Stream<16>::ArrayPopcntTy ones2;
-  stream2.popcnt(ones2);
-  EXPECT_EQ(ones2[0], 2);
-  EXPECT_EQ(ones2[1], 1);
-  EXPECT_EQ(ones2[8], 1);
-  EXPECT_EQ(ones2[9], 0);
+  // Basic stuff:
+  EXPECT_EQ(stream.get_bits_before<4>(0, 4), 0x4);
+  EXPECT_EQ(stream.get_bits_before<4>(0, 0), 0x0);
+  EXPECT_EQ(stream.get_bits_before<4>(0, 8), 0x3);
+  EXPECT_EQ(stream.get_bits_before<8>(0, 4), 0x40);
+  EXPECT_EQ(stream.get_bits_before<2>(0, 3), 0x2);
+  // Other:
+  EXPECT_EQ(stream.get_bits_before<6>(0, 8) >> 2, 0x3);
+  EXPECT_EQ(stream.get_bits_before<4>(0, 12), 0xf);
+  EXPECT_EQ(stream.get_bits_before<2>(0, 14), 0x3);
+  EXPECT_EQ(stream.get_bits_before<4>(1, 8), 0xa);
+  // Cross nibble.
+  EXPECT_EQ(stream.get_bits_before<3>(1, 11), 0x7);
+  EXPECT_EQ(stream.get_bits_before<3>(1, 12), 0x3);
+  EXPECT_EQ(stream.get_bits_before<3>(1, 13), 0x5);
+  EXPECT_EQ(stream.get_bits_before<3>(1, 14), 0x6);
+  //  Cross byte.
+  EXPECT_EQ(stream.get_bits_before<8>(0, 12), 0xf3);
+  EXPECT_EQ(stream.get_bits_before<8>(1, 12), 0x7a);
 }
 
 TEST(LegdayTest, BF16Transform0) {
   {
-  uint8_t buffer[2] = {0x80, 0x01};
-  rotate_b16(buffer, 1);
-  EXPECT_EQ(buffer[0], 0xc0);
-  EXPECT_EQ(buffer[1], 0x00);
-  rotate_b16(buffer, 15);
-  EXPECT_EQ(buffer[0], 0x80);
-  EXPECT_EQ(buffer[1], 0x01);
+    uint8_t buffer[2] = {0x80, 0x01};
+    rotate_b16(buffer, 1);
+    EXPECT_EQ(buffer[0], 0xc0);
+    EXPECT_EQ(buffer[1], 0x00);
+    rotate_b16(buffer, 15);
+    EXPECT_EQ(buffer[0], 0x80);
+    EXPECT_EQ(buffer[1], 0x01);
   }
   {
     uint16_t buffer[1] = {0x80};
-    std::span<uint8_t> span((uint8_t*)buffer, 2);
+    std::span<uint8_t> span((uint8_t *)buffer, 2);
     rotate_b16(span, 1);
     EXPECT_EQ(buffer[0], 0x40);
   }
@@ -111,4 +111,28 @@ TEST(LegdayTest, EncoderDecoder0) {
     EXPECT_EQ(bit2.has_value(), true);
     EXPECT_EQ(bit2.value(), bit);
   }
+}
+
+TEST(LegdayTest, RoundTrip0) {
+  uint8_t buffer[2] = {
+      0x60,
+      0x59,
+  };
+  std::vector<uint8_t> compressed = compress(buffer, Layout::INT8);
+  std::vector<uint8_t> decompressed = decompress(compressed);
+  EXPECT_EQ(decompressed, std::vector<uint8_t>(buffer, buffer + 2));
+}
+
+TEST(LegdayTest, RoundTrip1) {
+  uint8_t buffer[64] = {
+      0x60, 0x59, 0x24, 0xd1, 0xc1, 0x94, 0x16, 0xf8, 0xcc, 0x92, 0x7f,
+      0x90, 0x57, 0xca, 0xe3, 0x91, 0x60, 0x59, 0x24, 0xd1, 0xc1, 0x94,
+      0x16, 0xf8, 0xcc, 0x92, 0x7f, 0x90, 0x57, 0xca, 0xe3, 0x91, 0x60,
+      0x59, 0x24, 0xd1, 0xc1, 0x94, 0x16, 0xf8, 0xcc, 0x92, 0x7f, 0x90,
+      0xff, 0xff, 0xff, 0xff, 0x60, 0x59, 0x24, 0xd1, 0xc1, 0x94, 0x16,
+      0xf8, 0xcc, 0x92, 0x7f, 0x90, 0xaa, 0xaa, 0xaa, 0xaa,
+  };
+  std::vector<uint8_t> compressed = compress(buffer, Layout::INT8);
+  std::vector<uint8_t> decompressed = decompress(compressed);
+  EXPECT_EQ(decompressed, std::vector<uint8_t>(buffer, buffer + 64));
 }
