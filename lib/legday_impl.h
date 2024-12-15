@@ -42,20 +42,19 @@ public:
     return (buffer_[base + byte_idx] >> bit) & 0x1;
   }
 
-  /// Storage for the popcnt result.
-  using ArrayPopcntTy = uint64_t[NumChannels];
-
-  /// Fill the array 'ones' with the number of bits in each channel.
-  void popcnt(ArrayPopcntTy &ones) {
-    size_t elem_bytes = NumChannels / 8;
-    for (int i = 0; i < NumChannels; i++) {
-      ones[i] = 0;
+  /// return the NUM_BITS bits before the 'bit'-th bit in word at 'offset'.
+  template <unsigned NumBits>
+  uint8_t get_bits_before(size_t offset, uint8_t bit) {
+    size_t num_channels_bytes = NumChannels / 8;
+    size_t base = (offset * num_channels_bytes);
+    uint64_t value = 0;
+    for (int i = 0; i < NumChannels / 8; i++) {
+      value |= uint64_t(buffer_[base + i]) << (i * 8);
     }
-    for (size_t offset = 0; offset < buffer_.size() / elem_bytes; offset++) {
-      for (int channel = 0; channel < NumChannels; channel++) {
-        ones[channel] += get(offset, channel);
-      }
-    }
+    // The bit sequence might start before the first byte. We clear the top by
+    // shifting, avoiding overflow, and shifting back, which may underflow.
+    uint64_t shifted = (value << (32 - bit)) & 0xffffffff;
+    return shifted >> (32 - NumBits);
   }
 };
 

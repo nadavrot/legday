@@ -7,6 +7,8 @@
 
 using namespace legday;
 
+static constexpr unsigned ADAPTIVE_BIT = 4;
+
 legday::BitonicEncoder::BitonicEncoder(std::vector<uint8_t> &output)
     : low_(0), high_(0xffffffff), output_(output) {}
 
@@ -89,6 +91,21 @@ std::optional<bool> legday::BitonicDecoder::decode(uint16_t prob) {
   return bit;
 }
 
+template <unsigned CHANNELS, unsigned BITS>
+void get_correlations(Stream<CHANNELS> &stream, unsigned for_bit,
+                      uint16_t prob[1 << BITS]) {
+  int one[1 << BITS] = {0};
+  int all[1 << BITS] = {0};
+  for (int word = 0; word < stream.size(); word++) {
+    unsigned key = stream.template get_bits_before<BITS>(word, for_bit);
+    one[key] += stream.get(word, for_bit);
+    all[key] += 1;
+  }
+  for (int i = 0; i < 1 << BITS; i++) {
+    prob[i] = all[i] == 0 ? 0 : (uint64_t(one[i]) * 65535) / all[i];
+  }
+}
+
 void legday::rotate_b16(std::span<uint8_t> input, uint8_t n) {
   assert(input.size() % 2 == 0);
   for (size_t i = 0; i < input.size(); i += 2) {
@@ -102,24 +119,25 @@ void legday::rotate_b16(std::span<uint8_t> input, uint8_t n) {
 template <unsigned CHANNELS>
 void compress_impl(std::span<uint8_t> input, std::vector<uint8_t> &output) {
   assert((input.size() * 8) % CHANNELS == 0);
-
-  typename Stream<CHANNELS>::ArrayPopcntTy ones;
   Stream<CHANNELS> stream(input);
-  stream.popcnt(ones);
 
   // Save uint16_t per channel (the probability of a bit being 1).
-  uint16_t prob[CHANNELS] = {0};
-  for (int i = 0; i < CHANNELS; i++) {
-    prob[i] = uint16_t((ones[i] * 65535) / stream.size());
-    push<uint16_t>(output, prob[i]);
-  }
+  uint16_t prob[1 << ADAPTIVE_BIT] = {0};
 
-  for (int i = 0; i < CHANNELS; i++) {
+  for (unsigned ch = 0; ch < CHANNELS; ch++) {
     BitonicEncoder encoder(output);
 
-    for (size_t j = 0; j < stream.size(); j++) {
-      bool bit = stream.get(j, i);
-      encoder.encode(bit, prob[i]);
+    // Serialize the conditional probability table.
+    get_correlations<CHANNELS, ADAPTIVE_BIT>(stream, ch, prob);
+    for (int i = 0; i < (1 << ADAPTIVE_BIT); i++) {
+      push<uint16_t>(output, prob[i]);
+    }
+
+    for (size_t w = 0; w < stream.size(); w++) {
+      bool bit = stream.get(w, ch);
+      unsigned key = stream.template get_bits_before<ADAPTIVE_BIT>(w, ch);
+
+      encoder.encode(bit, prob[key]);
     }
     encoder.finalize();
   }
@@ -158,13 +176,13 @@ static void sort_symbols(std::span<uint8_t> input, std::span<uint8_t> decoder,
 }
 
 std::vector<uint8_t> legday::compress(std::span<uint8_t> input, Layout layout) {
-   uint8_t decoder[256];
+  uint8_t decoder[256];
   std::vector<uint8_t> output;
   push<uint32_t>(output, 0x474c5944); // Magic
   push<uint8_t>(output, layout);      // Kind
   switch (layout) {
   case Layout::BF16: {
-    push<uint32_t>(output, input.size()/2); // Words
+    push<uint32_t>(output, input.size() / 2); // Words
     rotate_b16(input, 15);
     sort_symbols(input, decoder, 2, 1);
     output.insert(output.end(), decoder, decoder + 256);
@@ -172,8 +190,8 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input, Layout layout) {
     break;
   }
   case Layout::FP32: {
-    push<uint32_t>(output, input.size()/4); // Words
-    rotate_b16(input, 15);   
+    push<uint32_t>(output, input.size() / 4); // Words
+    rotate_b16(input, 15);
     sort_symbols(input, decoder, 4, 3);
     output.insert(output.end(), decoder, decoder + 256);
     compress_impl<32>(input, output);
@@ -185,28 +203,28 @@ std::vector<uint8_t> legday::compress(std::span<uint8_t> input, Layout layout) {
     break;
   }
   }
-
   return output;
 }
 
 template <unsigned CHANNELS>
 std::vector<uint8_t> decompress_impl(std::span<uint8_t> input, size_t words) {
-  uint16_t prob[CHANNELS] = {0};
-  for (int i = 0; i < CHANNELS; i++) {
-    prob[i] = read<uint16_t>(input, 0);
-    input = input.subspan(2);
-  }
-
+  uint16_t prob[1 << ADAPTIVE_BIT] = {0};
   std::vector<uint8_t> output(words * (CHANNELS / 8), 0);
   Stream<CHANNELS> stream(output);
 
-  for (int i = 0; i < CHANNELS; i++) {
-    BitonicDecoder decoder(input);
+  for (int ch = 0; ch < CHANNELS; ch++) {
+    // Read the conditional probability table.
+    for (int i = 0; i < (1 << ADAPTIVE_BIT); i++) {
+      prob[i] = read<uint16_t>(input, 0);
+      input = input.subspan(2);
+    }
 
+    BitonicDecoder decoder(input);
     for (size_t w = 0; w < words; w++) {
-      auto bit = decoder.decode(prob[i]);
+      unsigned key = stream.template get_bits_before<ADAPTIVE_BIT>(w, ch);
+      auto bit = decoder.decode(prob[key]);
       assert(bit.has_value());
-      stream.set(w, i, bit.value());
+      stream.set(w, ch, bit.value());
     }
     input = input.subspan(decoder.consumed());
   }
@@ -215,25 +233,24 @@ std::vector<uint8_t> decompress_impl(std::span<uint8_t> input, size_t words) {
 }
 
 std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
-  uint32_t magic = read<uint32_t>(input, 0);  // Magic
-  uint8_t kind = read<uint8_t>(input, 4);     // Kind
-  uint32_t words = read<uint32_t>(input, 5);  // Number of words
-  assert(magic == 0x474c5944);
+  uint32_t magic = read<uint32_t>(input, 0); // Magic
+  uint8_t kind = read<uint8_t>(input, 4);    // Kind
+  uint32_t words = read<uint32_t>(input, 5); // Number of words
   input = input.subspan(9);
+  assert(magic == 0x474c5944);
+  (void)magic;
 
   switch (kind) {
   case Layout::BF16: {
     std::span<uint8_t> decoder(input.data(), 256);
-    input = input.subspan(256);
-    std::vector<uint8_t> output = decompress_impl<16>(input, words);
+    auto output = decompress_impl<16>(input.subspan(256), words);
     decode_symbols(output, decoder, 2, 1);
     rotate_b16(output, 1);
     return output;
   }
   case Layout::FP32: {
     std::span<uint8_t> decoder(input.data(), 256);
-    input = input.subspan(256);
-    std::vector<uint8_t> output = decompress_impl<32>(input, words);
+    auto output = decompress_impl<32>(input.subspan(256), words);
     decode_symbols(output, decoder, 4, 3);
     rotate_b16(output, 1);
     return output;
@@ -242,5 +259,6 @@ std::vector<uint8_t> legday::decompress(std::span<uint8_t> input) {
     return decompress_impl<8>(input, words);
   default:
     assert(false);
+    return {};
   }
 }
